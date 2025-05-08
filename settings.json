@@ -1,0 +1,9 @@
+{
+  "reportPaths": {
+    "helix": "https://hancommdssystem-my.sharepoint.com/:u:/g/personal/sejin_park_mdsit_co_kr/EaxhylS94h1Phl8QKFmRljYBJ8oZx1N5YftzcOlJ1xbp4w?e=D9MjkT",
+    "codesonar": "https://hancommdssystem-my.sharepoint.com/:u:/g/personal/sejin_park_mdsit_co_kr/EVEA70zDdL1Ov4JbjEget4gBIUYPGBNNB5uMIZ3j5Z_3oA?e=cVVIig",
+    "vectorcast": "C:/Users/mds/Downloads/DMain_Full_Report.html",
+    "rapita": "https://hancommdssystem-my.sharepoint.com/:u:/g/personal/sejin_park_mdsit_co_kr/EdlCSQaB03FBvSzltiHD8PsBGTMUivq4FxuGxN5F89lk4g?e=6STLFL"
+  },
+  "serverUrl": "http://codebeamer.mdsit.co.kr:8080"
+}
