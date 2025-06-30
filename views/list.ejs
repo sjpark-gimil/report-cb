@@ -12,33 +12,55 @@
   
   <body>
     <header class="header">
-        <div class="logo"><a href="https://www.mdsit.co.kr/index"><img src="images/mds_logo_horizontal.png" alt="Logo" /></a></div>
-        <div class="title-container"><h1>Codebeamer Connector</h1><p>Report Hub by MDS Intelligence</p></div>
+        <div class="logo"><a href="https://www.mdsit.co.kr"><img src="images/mds_logo_horizontal.png" alt="Logo" /></a></div>
+        <div class="title-container"><h1>Codebeamer Connector</h1><p>VectorCAST Report Hub </p></div>
         <div class="menu-container">
-            <a href="/" class="menu-item <%= currentPath === '/' ? 'active' : '' %>"><img src="images/home.svg" alt="Home" />Home</a>
+            <span class="menu-item"><img src="images/user.svg" alt="User" /><%= username %></span>
             <a href="#" class="menu-item" onclick="handleLogout()"><img src="images/logout.svg" alt="Logout" />Logout</a>
         </div>                  
     </header>
 
     <div class="pipeline-containers">
-        <!-- VectorCAST Card -->
+   
+        <!--Single VectorCAST Report Card -->
         <div class="pipeline-container">
-            <h2>VectorCAST</h2>
+            <h2>VectorCAST (Single Report)</h2>
             <div class="pipeline-form">
-                <div class="input-container">
-                    <input type="text" id="vectorcastItemId" placeholder="Item ID 입력" required>
-                    <button class="inline-button" onclick="updateCodebeamer('vectorcast')" alt="Run">
-                        <span>결과 전송</span>
-                    </button>
-                </div>
-                <div class="file-drop-zone" id="vectorcastDropZone">
-                    <p>리포트 파일을 여기에 끌어다 놓으세요</p>
-                    <div class="custom-file-button">파일 선택</div>
-                    <input type="file" id="vectorcastFileInput" accept=".html" style="display: none;">
-                </div>
-                <div class="dropped-file-info" id="vectorcastFileInfo" style="display: none;">
-                    <span id="vectorcastFileName"></span>
-                    <button class="remove-file-btn" onclick="removeDroppedFile('vectorcast')">×</button>
+                <div class="multiple-actions-container">
+                    <div class="multiple-actions-header">
+                        <span>단일 리포트 결과 일괄 처리</span>
+                        <button class="add-action-btn" onclick="addVectorcastAction()">+ 필드 추가</button>
+                    </div>
+                    <div id="vectorcastActions">
+                        <div class="vectorcast-action" data-index="0">
+                            <div class="action-inputs">
+                                <div class="selector-container">
+                                    <select class="action-project-selector" data-index="0" onchange="loadTrackers(0)">
+                                        <option value="">프로젝트 선택</option>
+                                    </select>
+                                    <select class="action-tracker-selector" data-index="0" onchange="loadItems(0)" disabled>
+                                        <option value="">트래커 선택</option>
+                                    </select>
+                                    <select class="action-item-selector" data-index="0" disabled>
+                                        <option value="">아이템 선택</option>
+                                    </select>
+                                </div>
+                                <div class="action-file-drop-zone" data-index="0">
+                                    <button class="file-select-btn" onclick="selectFileForAction(0)">파일 선택</button>
+                                    <input type="file" class="action-file-input" accept=".html" style="display: none;" onchange="handleActionFileChange(0)">
+                                    <span class="action-file-name">파일이 없습니다</span>
+                                </div>
+                                <button class="action-view-codebeamer" onclick="viewActionCodebeamer(0)">코드비머 보기</button>
+                                <button class="action-view-report" onclick="viewActionReport(0)">리포트 보기</button>
+                                <button class="remove-action-btn" onclick="removeVectorcastAction(0)" style="display: none;">×</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="multiple-actions-controls">
+                        <button class="inline-button" onclick="processMultipleVectorcastActions()">
+                            <span>결과 전송</span>
+                        </button>
+                    </div>
                 </div>
             </div>
             <div id="vectorcastStatus" class="status"></div>
@@ -46,9 +68,10 @@
                 <div class="progress-fill"></div>
                 <span class="progress-text">0%</span>
             </div>
-            <div class="report-link">
-                <a href="#" id="vectorcastReportLink" onclick="viewCodebeamerItem('vectorcast')">코드비머 보기</a>
-                <a href="#" id="vectorcastReportViewLink" onclick="openReport('vectorcast', event)" style="margin-left: 10px;">리포트 보기</a>
+            
+            <div id="vectorcastResults" class="status-message">
+                <h4>전송 결과</h4>
+                <div id="vectorcastResultsList"></div>
             </div>
         </div>
 
@@ -57,15 +80,32 @@
             <h2>VectorCAST (Multiple Reports)</h2>
             <div class="pipeline-form">
                 <div class="input-container">
-                    <input type="text" id="vectorcastMultipleItemId" placeholder="Item ID 입력" required>
+                    <div class="selector-container">
+                        <select id="multipleProjectSelector" onchange="loadMultipleTrackers()">
+                            <option value="">프로젝트 선택</option>
+                        </select>
+                        <select id="multipleTrackerSelector" onchange="loadMultipleItems()" disabled>
+                            <option value="">트래커 선택</option>
+                        </select>
+                        <select id="multipleItemSelector" disabled>
+                            <option value="">아이템 선택</option>
+                        </select>
+                    </div>
                     <button class="inline-button" onclick="updateMultipleReports()" alt="Run">
                         <span>결과 전송</span>
                     </button>
                 </div>
                 <div class="multiple-file-drop-zone" id="multipleVectorcastDropZone">
-                    <p>여러 리포트 파일을 여기에 끌어다 놓으세요</p>
-                    <div class="custom-file-button">파일 선택</div>
+                    <p>리포트 파일을 여기에 끌어다 놓으세요 (단일/다중 파일 또는 폴더)</p>
+                    <div class="warning-text">
+                        <strong>⚠️ 주의:</strong> VectorCAST의 <strong>html 리포트</strong> 이외 다른 파일을 업로드할 경우, 원하는 결과값이 도출되지 않을 수 있습니다. <br>리포트 파일을 업로드 하기 전에 <strong>리포트 파일을 확인하세요.</strong>
+                    </div>
+                    <div class="upload-buttons">
+                        <div class="custom-file-button" onclick="document.getElementById('multipleVectorcastFileInput').click()">파일 선택</div>
+                        <div class="custom-file-button" onclick="document.getElementById('multipleVectorcastFolderInput').click()">폴더 선택</div>
+                    </div>
                     <input type="file" id="multipleVectorcastFileInput" accept=".html" multiple style="display: none;">
+                    <input type="file" id="multipleVectorcastFolderInput" webkitdirectory directory multiple style="display: none;">
                 </div>
                 <div class="multiple-dropped-files-container" id="multipleVectorcastFilesInfo" style="display: none;">
                     <div class="multiple-files-header">
@@ -74,12 +114,11 @@
                     </div>
                     <div id="multipleVectorcastFilesList" class="multiple-files-list"></div>
                 </div>
-                <!-- Add the summary container for multiple reports -->
                 <div class="multiple-reports-summary" id="multipleReportsSummary" style="display: none;">
                     <h4>리포트 요약</h4>
-                    <div class="summary-grid">
+                    <div class="summary-grid" id="multipleReportsSummaryGrid">
                         <div class="summary-item">
-                            <span class="summary-label">총 파일 수</span>
+                            <span class="summary-label">총 리포트 파일 수</span>
                             <span class="summary-value" id="multipleReportsTotalFiles">0</span>
                         </div>
                         <div class="summary-item">
@@ -89,18 +128,6 @@
                         <div class="summary-item">
                             <span class="summary-label">성공률</span>
                             <span class="summary-value" id="multipleReportsPassRate">0%</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-label">Statement Coverage</span>
-                            <span class="summary-value" id="multipleReportsStatementCoverage">0%</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-label">Branch Coverage</span>
-                            <span class="summary-value" id="multipleReportsBranchCoverage">0%</span>
-                        </div>
-                        <div class="summary-item">
-                            <span class="summary-label">Function Coverage</span>
-                            <span class="summary-value" id="multipleReportsFunctionCoverage">0%</span>
                         </div>
                     </div>
                 </div>
@@ -114,12 +141,50 @@
                 <a href="#" id="multipleVectorcastReportLink" onclick="viewCodebeamerItem('vectorcastMultiple')">코드비머 보기</a>
             </div>
         </div>
+
+
+
     </div>
 
 <script>
-    /* Simplified version of extractVectorCASTSummary for client-side use */
+    function extractUserCodeClientSide(html) {
+        const userCodeSections = [];
+        const h3Regex = /<h3>([^<]*User Code[^<]*)<\/h3>([\s\S]*?)(?=<h3>|<h2>|$)/gi;
+        let h3Match;
+        
+        while ((h3Match = h3Regex.exec(html)) !== null) {
+            const parentTitle = h3Match[1].trim();
+            const h3Content = h3Match[2];
+
+            if (!parentTitle.includes('Test Case / Parameter')) {
+                const h4Regex = /<h4>([^<]*)<\/h4>\s*<pre[^>]*>([\s\S]*?)<\/pre>/gi;
+                let h4Match;
+                
+                while ((h4Match = h4Regex.exec(h3Content)) !== null) {
+                    const subTitle = h4Match[1].trim();
+                    const content = h4Match[2].trim();
+                    
+                    if (!subTitle.includes('Test Case / Parameter')) {
+                        const cleanedContent = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&#34;/g, '"');
+                        
+                        userCodeSections.push({
+                            title: `${parentTitle} - ${subTitle}`,
+                            content: cleanedContent
+                        });
+                    }
+                }
+            }
+        }
+
+        const hasUserCode = userCodeSections.length > 0;
+
+        return {
+            userCodeSections,
+            hasUserCode
+        };
+    }
+
     function extractVectorCASTSummary(html) {
-        // Basic extraction of test results from VectorCAST report
         const createdDateMatch = html.match(/Date of Report Creation<\/th><td>(.*?)<\/td>/);
         const createdTimeMatch = html.match(/Time of Report Creation<\/th><td>(.*?)<\/td>/);
         const createdDate = createdDateMatch ? createdDateMatch[1] : "알수없음";
@@ -131,8 +196,6 @@
         const passFail = passFailMatch ? passFailMatch[1].trim() : "알수없음";      
         const expectedsMatch = html.match(/<td id="overall-results-expecteds">(.*?)<\/td>/);
         const expectedsPass = expectedsMatch ? expectedsMatch[1].split("PASS")[0].trim() : "알수없음";
-        
-        // Extract coverage data
         const statementCoverageMatch = html.match(/<td id="overall-results-statements">(.*?)<\/td>/);
         const statementCoverage = statementCoverageMatch ? statementCoverageMatch[1] : "알수없음";
         const branchCoverageMatch = html.match(/<td id="overall-results-branches">(.*?)<\/td>/);
@@ -140,7 +203,6 @@
         const functionCoverageMatch = html.match(/<td id="overall-results-functions">(.*?)<\/td>/);
         const functionCoverage = functionCoverageMatch ? functionCoverageMatch[1] : "알수없음";
 
-        // Parse test results
         let passedTests = 0, totalTests = 0, failedTests = 0;
         
         if (passFail !== "알수없음") {
@@ -159,7 +221,6 @@
             }
         }
 
-        // Parse expecteds results
         let passedExpects = 0, totalExpects = 0, failedExpects = 0;
         
         if (expectedsPass !== "알수없음") {
@@ -170,7 +231,9 @@
                 failedExpects = totalExpects - passedExpects;
             }
         }
-        
+
+        const userCode = extractUserCodeClientSide(html);
+
         return {
             created,
             passFail,
@@ -184,31 +247,18 @@
             statementCoverage,
             branchCoverage,
             functionCoverage,
-            // Empty arrays for fields not used in client-side
             testCaseNotes: [],
             cbaNotes: [],
-            fileNames: []
+            userCode
         };
     }
     
     const defaults = {
-    cbApiUrl: 'http://codebeamer.mdsit.co.kr:8080',
-    cbWebUrl: 'http://codebeamer.mdsit.co.kr:8080',
+    cbApiUrl: 'http://codebeamer.mdsit.co.kr:3008',
+    cbWebUrl: 'http://codebeamer.mdsit.co.kr:3008',
 };
     document.addEventListener('DOMContentLoaded', () => {
         const username = '<%= username %>';
-        ['vectorcast', 'vectorcastMultiple', 'helix', 'codesonar', 'rapita'].forEach(type => {
-            const savedId = localStorage.getItem(`${username}_${type}ItemId`);
-            if (savedId) { 
-                const elementId = type === 'vectorcastMultiple' ? 'vectorcastMultipleItemId' : `${type}ItemId`;
-                document.getElementById(elementId).value = savedId; 
-            }
-
-            if (type !== 'vectorcastMultiple') {
-                initDragAndDrop(type);
-            }
-        });
-
         initMultipleFileUpload();
 
         const settingsUpdated = localStorage.getItem('settingsUpdatedAt');
@@ -328,11 +378,20 @@
         }
     }
 
+    let statusTimeout;
+
     function showStatus(element, message, isSuccess) {
+        if (statusTimeout) {
+            clearTimeout(statusTimeout);
+        }
+        
         element.textContent = message;
         element.style.display = 'block';
         element.className = 'status ' + (isSuccess ? 'success' : 'error');
-        setTimeout(() => { element.style.display = 'none'; }, 3000);
+
+        statusTimeout = setTimeout(() => { 
+            element.style.display = 'none'; 
+        }, 3000);
     }
 
     function handleLogout() {
@@ -340,11 +399,21 @@
     }
 
     function viewCodebeamerItem(type) {
-        const itemId = document.getElementById(`${type}ItemId`).value;
-        const statusElement = document.getElementById(`${type}Status`);
+        let itemId;
+        let statusElement;
+        
+        if (type === 'vectorcastMultiple') {
+            const itemSelector = document.getElementById('multipleItemSelector');
+            itemId = itemSelector.value;
+            statusElement = document.getElementById('multipleVectorcastStatus');
+        } else {
+            const itemElement = document.getElementById(`${type}ItemId`);
+            itemId = itemElement ? itemElement.value : '';
+            statusElement = document.getElementById(`${type}Status`);
+        }
         
         if (!itemId) {
-            showStatus(statusElement, 'Item ID를 입력하세요', false);
+            showStatus(statusElement, '아이템을 선택하세요', false);
             return;
         }
 
@@ -354,7 +423,7 @@
             return;
         }
 
-        const itemUrl = `${serverUrl}/cb/item/${itemId}`;
+        const itemUrl = `${serverUrl}/item/${itemId}`;
         window.open(itemUrl, '_blank');
     }
 
@@ -367,21 +436,17 @@
             return;
         }
 
+        restoreExistingFile(type);
+
         dropZone.addEventListener('click', (e) => {
             if (e.target === dropZone || e.target.classList.contains('custom-file-button')) {
                 fileInput.click();
             }
         });
 
-        const customButton = dropZone.querySelector('.custom-file-button');
-        if (customButton) {
-            customButton.addEventListener('click', () => {
-                fileInput.click();
-            });
-        }
-
         fileInput.addEventListener('change', (event) => {
             handleFiles(type, event.target.files);
+            event.target.value = '';
         });
 
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -406,6 +471,21 @@
             handleFiles(type, files);
         }, false);
     }
+
+    function restoreExistingFile(type) {
+        const existingFileName = localStorage.getItem(`${type}DroppedFile`);
+        if (existingFileName) {
+            const fileInfo = document.getElementById(`${type}FileInfo`);
+            const fileName = document.getElementById(`${type}FileName`);
+            const dropZone = document.getElementById(`${type}DropZone`);
+            
+            if (fileInfo && fileName && dropZone) {
+                fileName.textContent = existingFileName;
+                fileInfo.style.display = 'flex';
+                dropZone.style.display = 'flex'; 
+            }
+        }
+    }
     
     function preventDefaults(event) {
         event.preventDefault();
@@ -423,6 +503,13 @@
             return;
         }
 
+        const existingFileName = localStorage.getItem(`${type}DroppedFile`);
+        if (existingFileName) {
+            deleteReportContent(existingFileName).catch(err => {
+                console.error('Error deleting existing file content:', err);
+            });
+        }
+
         localStorage.setItem(`${type}DroppedFile`, file.name);
 
         const fileInfo = document.getElementById(`${type}FileInfo`);
@@ -431,7 +518,8 @@
         
         fileName.textContent = file.name;
         fileInfo.style.display = 'flex';
-        dropZone.style.display = 'none';
+
+        dropZone.style.display = 'flex';
 
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -471,23 +559,15 @@
     function initMultipleFileUpload() {
         const dropZone = document.getElementById('multipleVectorcastDropZone');
         const fileInput = document.getElementById('multipleVectorcastFileInput');
+        const folderInput = document.getElementById('multipleVectorcastFolderInput');
         
-        if (!dropZone || !fileInput) return;
-
-        dropZone.addEventListener('click', (e) => {
-            if (e.target === dropZone || e.target.classList.contains('custom-file-button')) {
-                fileInput.click();
-            }
-        });
-
-        const customButton = dropZone.querySelector('.custom-file-button');
-        if (customButton) {
-            customButton.addEventListener('click', () => {
-                fileInput.click();
-            });
-        }
+        if (!dropZone || !fileInput || !folderInput) return;
 
         fileInput.addEventListener('change', (event) => {
+            handleMultipleFiles(event.target.files);
+        });
+
+        folderInput.addEventListener('change', (event) => {
             handleMultipleFiles(event.target.files);
         });
 
@@ -510,6 +590,7 @@
         dropZone.addEventListener('drop', (event) => {
             const dt = event.dataTransfer;
             const files = dt.files;
+
             handleMultipleFiles(files);
         }, false);
 
@@ -528,55 +609,80 @@
         
         const statusElement = document.getElementById('multipleVectorcastStatus');
         const existingFiles = JSON.parse(sessionStorage.getItem('vectorcastMultipleFiles') || '[]');
-        const filePromises = Array.from(files).map(file => {
-            if (!file.name.toLowerCase().endsWith('.html')) {
-                showStatus(statusElement, 'HTML 파일만 업로드 가능합니다', false);
-                return Promise.resolve(null);
-            }
+        const htmlFiles = Array.from(files).filter(file => file.name.toLowerCase().endsWith('.html'));
+        
+        if (htmlFiles.length === 0) {
+            showStatus(statusElement, 'HTML 파일만 업로드 가능합니다', false);
+            return;
+        }
 
-            return new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    resolve({
+        const newFiles = htmlFiles.filter(file => !existingFiles.some(existing => existing.name === file.name));
+        
+        if (newFiles.length === 0) {
+            showStatus(statusElement, '모든 파일이 이미 업로드되어 있습니다', false);
+            return;
+        }
+
+        showStatus(statusElement, `${newFiles.length}개 파일을 처리하는 중...`, true);
+
+        let processedCount = 0;
+        let successCount = 0;
+        const updatedFiles = [...existingFiles];
+
+        newFiles.forEach((file, index) => {
+            const reader = new FileReader();
+            
+            reader.onload = (event) => {
+                try {
+                    const fileData = {
                         name: file.name,
                         size: file.size,
                         content: event.target.result
-                    });
-                };
-                reader.onerror = reject;
-                reader.readAsText(file);
-            });
-        });
+                    };
 
-        Promise.all(filePromises)
-            .then(results => {
-                const validFiles = results.filter(result => result !== null);   
-                if (validFiles.length === 0) {
-                    return;
-                }
-
-                const updatedFiles = [...existingFiles];
-                
-                validFiles.forEach(file => {
-                    const existingIndex = updatedFiles.findIndex(f => f.name === file.name);
-                    if (existingIndex >= 0) {
-                        updatedFiles[existingIndex] = { name: file.name, size: file.size };
-                    } else {
-                        updatedFiles.push({ name: file.name, size: file.size });
+                    storeReportContent(file.name, fileData.content)
+                        .then(() => {
+                            updatedFiles.push({ name: file.name, size: file.size });
+                            successCount++;
+                            processedCount++;
+                            
+                            sessionStorage.setItem('vectorcastMultipleFiles', JSON.stringify(updatedFiles));
+                            updateMultipleFilesUI(updatedFiles);
+           
+                            if (processedCount === newFiles.length) {
+                                showStatus(statusElement, `${successCount}개 파일이 성공적으로 업로드되었습니다`, true);
+    
+                                document.getElementById('multipleVectorcastFileInput').value = '';
+                                document.getElementById('multipleVectorcastFolderInput').value = '';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error storing file content:', error);
+                            processedCount++;
+                            
+                            if (processedCount === newFiles.length) {
+                                showStatus(statusElement, `${successCount}개 파일 업로드 완료 (${newFiles.length - successCount}개 실패)`, successCount > 0);
+                            }
+                        });
+                } catch (error) {
+                    console.error('Error processing file:', error);
+                    processedCount++;
+                    
+                    if (processedCount === newFiles.length) {
+                        showStatus(statusElement, `${successCount}개 파일 업로드 완료 (${newFiles.length - successCount}개 실패)`, successCount > 0);
                     }
-    
-                    storeReportContent(file.name, file.content);
-                });
- 
-                sessionStorage.setItem('vectorcastMultipleFiles', JSON.stringify(updatedFiles));
-    
-                updateMultipleFilesUI(updatedFiles);           
-                showStatus(statusElement, `${validFiles.length}개 파일이 업로드되었습니다`, true);
-            })
-            .catch(error => {
-                console.error('Error processing files:', error);
-                showStatus(statusElement, '파일을 처리하는 중 오류가 발생했습니다: ' + error.message, false);
-            });
+                }
+            };
+            
+            reader.onerror = () => {
+                processedCount++;
+                if (processedCount === newFiles.length) {
+                    showStatus(statusElement, `${successCount}개 파일 업로드 완료 (${newFiles.length - successCount}개 실패)`, successCount > 0);
+                }
+            };
+            
+            reader.readAsText(file);
+        });
     }
 
     const DB_NAME = 'VectorcastDB';
@@ -708,11 +814,10 @@
 
         if (files.length > 0) {
             filesContainer.style.display = 'block';
-            dropZone.style.display = 'none';
         } else {
             filesContainer.style.display = 'none';
-            dropZone.style.display = 'flex';
         }
+        dropZone.style.display = 'flex';
     }
 
     function removeMultipleFile(index) {
@@ -726,6 +831,9 @@
 
             sessionStorage.setItem('vectorcastMultipleFiles', JSON.stringify(files));
             updateMultipleFilesUI(files);
+
+            const statusElement = document.getElementById('multipleVectorcastStatus');
+            showStatus(statusElement, `${removedFile.name} 파일이 제거되었습니다`, true);
         }
     }
 
@@ -736,6 +844,9 @@
         });
 
         updateMultipleFilesUI([]);
+
+        const statusElement = document.getElementById('multipleVectorcastStatus');
+        showStatus(statusElement, '모든 파일이 제거되었습니다', true);
     }
 
     function formatFileSize(bytes) {
@@ -750,7 +861,8 @@
 
     function updateMultipleReports() {
         const username = '<%= username %>';
-        const itemId = document.getElementById('vectorcastMultipleItemId').value;
+        const itemSelector = document.getElementById('multipleItemSelector');
+        const itemId = itemSelector.value;
         const statusElement = document.getElementById('multipleVectorcastStatus');
         const progressBar = document.getElementById('multipleVectorcastProgress');
         const progressFill = progressBar.querySelector('.progress-fill');
@@ -758,7 +870,7 @@
         const summaryElement = document.getElementById('multipleReportsSummary');
         
         if (!itemId) {
-            showStatus(statusElement, 'Item ID를 입력하세요', false);
+            showStatus(statusElement, '아이템을 선택하세요', false);
             return;
         }
         
@@ -777,7 +889,7 @@
         statusElement.style.display = 'block';
         statusElement.className = 'status';
    
-        localStorage.setItem(`${username}_vectorcastMultipleItemId`, itemId);
+
 
         const contentPromises = files.map(file => getReportContent(file.name));
         
@@ -857,66 +969,132 @@
     }
 
     function updateMultipleReportSummary(data) {
-        document.getElementById('multipleReportsTotalFiles').textContent = data.totalFiles || 0;
+        function hasValidCoverage(coverage) {
+            if (!coverage || coverage === "알수없음") {
+                return false;
+            }
+
+            if (coverage.match(/^0\s*\/\s*0\s*\(\s*0%\s*\)$/) || coverage === "0%") {
+                return false;
+            }
+            
+            return true;
+        }
+
+        function getCoverageClass(value) {
+            const percentage = parseInt(value || 0);
+            if (percentage >= 99) {
+                return 'summary-value good';
+            } else if (percentage >= 70) {
+                return 'summary-value warning';
+            } else {
+                return 'summary-value bad';
+            }
+        }
+
+        document.getElementById('multipleReportsTotalFiles').textContent = data.reportCount || 0;
         document.getElementById('multipleReportsTestCases').textContent = data.passFail || '0 / 0 PASS';
         
         const passRateElement = document.getElementById('multipleReportsPassRate');
         const passRate = data.passFailRate || 0;
         passRateElement.textContent = `${passRate}%`;
+        passRateElement.className = getCoverageClass(passRate);
 
-        if (passRate >= 90) {
-            passRateElement.className = 'summary-value good';
-        } else if (passRate >= 70) {
-            passRateElement.className = 'summary-value warning';
-        } else {
-            passRateElement.className = 'summary-value bad';
-        }
+        const summaryGrid = document.getElementById('multipleReportsSummaryGrid');
 
-        const statementElement = document.getElementById('multipleReportsStatementCoverage');
-        const branchElement = document.getElementById('multipleReportsBranchCoverage');
-        const functionElement = document.getElementById('multipleReportsFunctionCoverage');
-        
-        statementElement.textContent = data.statementCoverage || '0%';
-        branchElement.textContent = data.branchCoverage || '0%';
-        functionElement.textContent = data.functionCoverage || '0%';
+        const existingCoverageItems = summaryGrid.querySelectorAll('.coverage-summary-item');
+        existingCoverageItems.forEach(item => item.remove());
 
-        const statementValue = parseInt(data.statementPercentage || 0);
-        const branchValue = parseInt(data.branchPercentage || 0);
-        const functionValue = parseInt(data.functionPercentage || 0);
+        const coverageTypes = [
+            {
+                key: 'statementCoverage',
+                percentageKey: 'statementPercentage',
+                label: 'Statement Coverage'
+            },
+            {
+                key: 'branchCoverage',
+                percentageKey: 'branchPercentage',
+                label: 'Branch Coverage'
+            },
+            {
+                key: 'functionCoverage',
+                percentageKey: 'functionPercentage',
+                label: 'Function Coverage'
+            },
+            {
+                key: 'functionCallCoverage',
+                percentageKey: 'functionCallPercentage',
+                label: 'Function Call Coverage'
+            }
+        ];
 
-        if (statementValue >= 90) {
-            statementElement.className = 'summary-value good';
-        } else if (statementValue >= 70) {
-            statementElement.className = 'summary-value warning';
-        } else {
-            statementElement.className = 'summary-value bad';
-        }
-   
-        if (branchValue >= 90) {
-            branchElement.className = 'summary-value good';
-        } else if (branchValue >= 70) {
-            branchElement.className = 'summary-value warning';
-        } else {
-            branchElement.className = 'summary-value bad';
-        }
-
-        if (functionValue >= 90) {
-            functionElement.className = 'summary-value good';
-        } else if (functionValue >= 70) {
-            functionElement.className = 'summary-value warning';
-        } else {
-            functionElement.className = 'summary-value bad';
-        }
+        coverageTypes.forEach(coverage => {
+            if (hasValidCoverage(data[coverage.key])) {
+                const coverageItem = document.createElement('div');
+                coverageItem.className = 'summary-item coverage-summary-item';
+                
+                const label = document.createElement('span');
+                label.className = 'summary-label';
+                label.textContent = coverage.label;
+                
+                const value = document.createElement('span');
+                value.className = getCoverageClass(data[coverage.percentageKey]);
+                value.textContent = data[coverage.key] || '0%';
+                
+                coverageItem.appendChild(label);
+                coverageItem.appendChild(value);
+                summaryGrid.appendChild(coverageItem);
+            }
+        });
     }
 
-    function viewCodebeamerItem(type) {
-        const elementId = type === 'vectorcastMultiple' ? 'vectorcastMultipleItemId' : `${type}ItemId`;
-        const itemId = document.getElementById(elementId).value;
-        const statusElementId = type === 'vectorcastMultiple' ? 'multipleVectorcastStatus' : `${type}Status`;
-        const statusElement = document.getElementById(statusElementId);
+    let actionCounter = 1;
+
+    function addVectorcastAction() {
+        const actionsContainer = document.getElementById('vectorcastActions');
+        const newAction = document.createElement('div');
+        newAction.className = 'vectorcast-action';
+        newAction.setAttribute('data-index', actionCounter);
+        
+        newAction.innerHTML = `
+            <div class="action-inputs">
+                <div class="selector-container">
+                    <select class="action-project-selector" data-index="${actionCounter}" onchange="loadTrackers(${actionCounter})">
+                        <option value="">프로젝트 선택</option>
+                    </select>
+                    <select class="action-tracker-selector" data-index="${actionCounter}" onchange="loadItems(${actionCounter})" disabled>
+                        <option value="">트래커 선택</option>
+                    </select>
+                    <select class="action-item-selector" data-index="${actionCounter}" disabled>
+                        <option value="">아이템 선택</option>
+                    </select>
+                </div>
+                <div class="action-file-drop-zone" data-index="${actionCounter}">
+                    <button class="file-select-btn" onclick="selectFileForAction(${actionCounter})">파일 선택</button>
+                    <input type="file" class="action-file-input" accept=".html" style="display: none;" onchange="handleActionFileChange(${actionCounter})">
+                    <span class="action-file-name">파일이 없습니다</span>
+                </div>
+                <button class="action-view-codebeamer" onclick="viewActionCodebeamer(${actionCounter})">코드비머 보기</button>
+                <button class="action-view-report" onclick="viewActionReport(${actionCounter})">리포트 보기</button>
+                <button class="remove-action-btn" onclick="removeVectorcastAction(${actionCounter})">×</button>
+            </div>
+        `;
+        
+        actionsContainer.appendChild(newAction);
+        updateRemoveButtonVisibility();
+        initActionDragAndDrop(actionCounter);
+        loadProjectsForAction(actionCounter);
+        actionCounter++;
+    }
+
+    function viewActionCodebeamer(index) {
+        const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
+        const itemSelector = action.querySelector('.action-item-selector');
+        const itemId = itemSelector.value.trim();
+        const statusElement = document.getElementById('vectorcastStatus');
         
         if (!itemId) {
-            showStatus(statusElement, 'Item ID를 입력하세요', false);
+            showStatus(statusElement, '아이템을 선택하세요', false);
             return;
         }
 
@@ -926,9 +1104,590 @@
             return;
         }
 
-        const itemUrl = `${serverUrl}/cb/item/${itemId}`;
+        const itemUrl = `${serverUrl}/item/${itemId}`;
         window.open(itemUrl, '_blank');
     }
+
+    function viewActionReport(index) {
+        const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
+        const statusElement = document.getElementById('vectorcastStatus');
+        const savedData = sessionStorage.getItem(`vectorcastAction_${index}`);
+        
+        if (savedData) {
+            try {
+                const fileData = JSON.parse(savedData);
+                const blob = new Blob([fileData.content], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                return;
+            } catch (error) {
+                console.error('Error reading saved file data:', error);
+            }
+        }
+
+        const fileInput = action.querySelector('.action-file-input');
+        if (!fileInput.files.length) {
+            showStatus(statusElement, '리포트 파일을 먼저 선택하세요', false);
+            return;
+        }
+
+        const file = fileInput.files[0];
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const reportContent = e.target.result;
+            const blob = new Blob([reportContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+        };
+        reader.onerror = function() {
+            showStatus(statusElement, '리포트를 열 수 없습니다', false);
+        };
+        reader.readAsText(file);
+    }
+
+    function removeVectorcastAction(index) {
+        const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
+        if (action) {
+            sessionStorage.removeItem(`vectorcastAction_${index}`);
+            action.remove();
+            updateRemoveButtonVisibility();
+        }
+    }
+
+    function updateRemoveButtonVisibility() {
+        const actions = document.querySelectorAll('.vectorcast-action');
+        actions.forEach((action, index) => {
+            const removeBtn = action.querySelector('.remove-action-btn');
+            if (removeBtn) {
+                removeBtn.style.display = actions.length > 1 ? 'flex' : 'none';
+            }
+        });
+    }
+
+    function selectFileForAction(index) {
+        const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
+        const fileInput = action.querySelector('.action-file-input');
+        fileInput.click();
+    }
+
+    function handleActionFileChange(index) {
+        const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
+        const fileInput = action.querySelector('.action-file-input');
+        const fileName = action.querySelector('.action-file-name');
+        
+        if (fileInput.files.length > 0) {
+            const file = fileInput.files[0];
+            fileName.textContent = file.name;
+            fileName.title = file.name; 
+            fileName.classList.add('has-file');
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const fileData = {
+                    name: file.name,
+                    size: file.size,
+                    content: event.target.result
+                };
+                sessionStorage.setItem(`vectorcastAction_${index}`, JSON.stringify(fileData));
+            };
+            reader.readAsText(file);
+        } else {
+            fileName.textContent = '파일이 없습니다';
+            fileName.title = ''; 
+            fileName.classList.remove('has-file');
+            sessionStorage.removeItem(`vectorcastAction_${index}`);
+        }
+    }
+
+    async function processMultipleVectorcastActions() {
+        const actions = document.querySelectorAll('.vectorcast-action');
+        const statusElement = document.getElementById('vectorcastStatus');
+        const progressBar = document.getElementById('vectorcastProgress');
+        const progressFill = progressBar.querySelector('.progress-fill');
+        const progressText = progressBar.querySelector('.progress-text');
+        const resultsDiv = document.getElementById('vectorcastResults');
+        const resultsList = document.getElementById('vectorcastResultsList');
+
+        progressBar.style.display = 'none';
+        resultsDiv.style.display = 'none';
+
+        const reports = [];
+
+        for (let i = 0; i < actions.length; i++) {
+            const action = actions[i];
+            const itemSelector = action.querySelector('.action-item-selector');
+            const itemId = itemSelector.value.trim();
+            const fileInput = action.querySelector('.action-file-input');
+            
+            if (!itemId) {
+                showStatus(statusElement, '아이템을 선택하세요', false);
+                return;
+            }
+
+            const actionIndex = action.getAttribute('data-index');
+            const savedData = sessionStorage.getItem(`vectorcastAction_${actionIndex}`);
+            
+            if (!savedData && !fileInput.files.length) {
+                showStatus(statusElement, '리포트 파일을 선택하세요', false);
+                return;
+            }
+
+            try {
+                let fileContent;
+                let fileName;
+                
+                if (savedData) {
+                    const fileData = JSON.parse(savedData);
+                    fileContent = fileData.content;
+                    fileName = fileData.name;
+                } else {
+                    fileContent = await readFileContent(fileInput.files[0]);
+                    fileName = fileInput.files[0].name;
+                }
+                
+                reports.push({
+                    itemId: itemId,
+                    reportContent: fileContent,
+                    fileName: fileName
+                });
+            } catch (error) {
+                showStatus(statusElement, `파일 읽기 실패 - ${error.message}`, false);
+                return;
+            }
+        }
+
+        if (reports.length === 0) {
+            showStatus(statusElement, '실행할 액션이 없습니다', false);
+            return;
+        }
+
+        progressBar.style.display = 'block';
+        progressFill.style.width = '0%';
+        progressText.textContent = '0%';
+        resultsDiv.style.display = 'none';
+
+        try {
+            showStatus(statusElement, `${reports.length}개 전송 중...`, true);
+
+            const response = await fetch('/api/codebeamer/bulk-single-reports', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify({ reports }),
+                credentials: 'include'
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || '업로드 실패');
+            }
+
+            showStatus(statusElement, `완료: ${result.successCount}개 성공, ${result.failureCount}개 실패`, result.failureCount === 0);
+
+            const username = '<%= username %>';
+            
+            if (result.results && result.results.length > 0) {
+                resultsList.innerHTML = result.results.map(r => `
+                    <div class="result-item ${r.success ? 'success' : 'error'}">
+                        <strong>Item ${r.itemId}</strong>: ${r.success ? r.message : r.error}
+                    </div>
+                `).join('');
+                resultsDiv.style.display = 'block';
+            }
+
+            progressFill.style.width = '100%';
+            progressText.textContent = '100%';
+
+            setTimeout(() => {
+                progressBar.style.display = 'none';
+            }, 2000);
+
+        } catch (error) {
+            progressBar.style.display = 'none';
+            showStatus(statusElement, error.message, false);
+            console.error('Multiple VectorCAST actions error:', error);
+        }
+    }
+
+    function readFileContent(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => resolve(e.target.result);
+            reader.onerror = (e) => reject(new Error('파일 읽기 실패'));
+            reader.readAsText(file);
+        });
+    }
+
+    function initActionDragAndDrop(index) {
+        const dropZone = document.querySelector(`.action-file-drop-zone[data-index="${index}"]`);
+        const fileInput = dropZone.querySelector('.action-file-input');
+        
+        if (!dropZone || !fileInput) return;
+
+        dropZone.addEventListener('click', (e) => {
+            if (e.target === dropZone || e.target.classList.contains('action-file-name')) {
+                fileInput.click();
+            }
+        });
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.add('drag-over');
+            }, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.remove('drag-over');
+            }, false);
+        });
+
+        dropZone.addEventListener('drop', (event) => {
+            const dt = event.dataTransfer;
+            const files = dt.files;
+            
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.name.toLowerCase().endsWith('.html')) {
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    fileInput.files = dataTransfer.files;
+  
+                    handleActionFileChange(index);
+                } else {
+                    const statusElement = document.getElementById('vectorcastStatus');
+                    showStatus(statusElement, 'HTML 파일만 업로드 가능합니다', false);
+                }
+            }
+        }, false);
+    }
+
+    function preventDefaults(event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    function initAllActionDragAndDrop() {
+        const actions = document.querySelectorAll('.vectorcast-action');
+        actions.forEach(action => {
+            const index = action.getAttribute('data-index');
+            initActionDragAndDrop(index);
+        });
+    }
+
+    function restoreSavedFiles() {
+        const actions = document.querySelectorAll('.vectorcast-action');
+        actions.forEach(action => {
+            const index = action.getAttribute('data-index');
+            const savedData = sessionStorage.getItem(`vectorcastAction_${index}`);
+            
+            if (savedData) {
+                try {
+                    const fileData = JSON.parse(savedData);
+                    const fileName = action.querySelector('.action-file-name');
+                    
+                    if (fileName) {
+                        fileName.textContent = fileData.name;
+                        fileName.title = fileData.name; 
+                        fileName.classList.add('has-file');
+                    }
+                } catch (error) {
+                    console.error('Error restoring saved file:', error);
+                    sessionStorage.removeItem(`vectorcastAction_${index}`);
+                }
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        updateRemoveButtonVisibility();
+        initAllActionDragAndDrop();
+        restoreSavedFiles();
+        loadProjectsForAction(0);
+        loadProjectsForMultiple();
+    });
+
+    async function loadProjectsForAction(index) {
+        try {
+            const response = await fetch('/api/codebeamer/projects', {
+                method: 'GET',
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch projects');
+            }
+            
+            const projects = await response.json();
+            const projectSelector = document.querySelector(`.action-project-selector[data-index="${index}"]`);
+            
+            if (projectSelector) {
+                projectSelector.innerHTML = '<option value="">프로젝트 선택</option>';
+                projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.id;
+                    option.textContent = project.name;
+                    projectSelector.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading projects:', error);
+        }
+    }
+
+    async function loadProjectsForMultiple() {
+        try {
+            const response = await fetch('/api/codebeamer/projects', {
+                method: 'GET',
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch projects');
+            }
+            
+            const projects = await response.json();
+            const projectSelector = document.getElementById('multipleProjectSelector');
+            
+            if (projectSelector) {
+                projectSelector.innerHTML = '<option value="">프로젝트 선택</option>';
+                projects.forEach(project => {
+                    const option = document.createElement('option');
+                    option.value = project.id;
+                    option.textContent = project.name;
+                    projectSelector.appendChild(option);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading projects:', error);
+        }
+    }
+
+    async function loadTrackers(index) {
+        const projectSelector = document.querySelector(`.action-project-selector[data-index="${index}"]`);
+        const trackerSelector = document.querySelector(`.action-tracker-selector[data-index="${index}"]`);
+        const itemSelector = document.querySelector(`.action-item-selector[data-index="${index}"]`);
+        
+        trackerSelector.innerHTML = '<option value="">트래커 선택</option>';
+        itemSelector.innerHTML = '<option value="">아이템 선택</option>';
+        trackerSelector.disabled = true;
+        itemSelector.disabled = true;
+        
+        if (!projectSelector.value) return;
+        
+        try {
+            const response = await fetch(`/api/codebeamer/projects/${projectSelector.value}/trackers`, {
+                method: 'GET',
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch trackers');
+            }
+            
+            const trackers = await response.json();
+            trackers.forEach(tracker => {
+                const option = document.createElement('option');
+                option.value = tracker.id;
+                option.textContent = tracker.name;
+                trackerSelector.appendChild(option);
+            });
+            
+            trackerSelector.disabled = false;
+        } catch (error) {
+            console.error('Error loading trackers:', error);
+        }
+    }
+
+    async function loadMultipleTrackers() {
+        const projectSelector = document.getElementById('multipleProjectSelector');
+        const trackerSelector = document.getElementById('multipleTrackerSelector');
+        const itemSelector = document.getElementById('multipleItemSelector');
+        
+        trackerSelector.innerHTML = '<option value="">트래커 선택</option>';
+        itemSelector.innerHTML = '<option value="">아이템 선택</option>';
+        trackerSelector.disabled = true;
+        itemSelector.disabled = true;
+        
+        if (!projectSelector.value) return;
+        
+        try {
+            const response = await fetch(`/api/codebeamer/projects/${projectSelector.value}/trackers`, {
+                method: 'GET',
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch trackers');
+            }
+            
+            const trackers = await response.json();
+            trackers.forEach(tracker => {
+                const option = document.createElement('option');
+                option.value = tracker.id;
+                option.textContent = tracker.name;
+                trackerSelector.appendChild(option);
+            });
+            
+            trackerSelector.disabled = false;
+        } catch (error) {
+            console.error('Error loading trackers:', error);
+        }
+    }
+
+    async function loadItems(index) {
+        const trackerSelector = document.querySelector(`.action-tracker-selector[data-index="${index}"]`);
+        const itemSelector = document.querySelector(`.action-item-selector[data-index="${index}"]`);
+        
+        console.log('loadItems called for index:', index, 'tracker value:', trackerSelector?.value);
+        
+        itemSelector.innerHTML = '<option value="">아이템 선택</option>';
+        itemSelector.disabled = true;
+        
+        if (!trackerSelector.value) {
+            console.log('No tracker selected, returning');
+            return;
+        }
+        
+        try {
+            const apiUrl = `/api/codebeamer/trackers/${trackerSelector.value}/items`;
+            console.log('Fetching items from:', apiUrl);
+            
+            const response = await fetch(apiUrl, {
+                method: 'GET',
+                credentials: 'include'
+            });
+            
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API error response:', errorText);
+                throw new Error(`Failed to fetch items: ${response.status} ${errorText}`);
+            }
+            
+            const responseData = await response.json();
+            console.log('Raw response data:', responseData);
+            
+            // Handle different response structures
+            let items;
+            if (Array.isArray(responseData)) {
+                items = responseData;
+            } else if (responseData.itemRefs && Array.isArray(responseData.itemRefs)) {
+                items = responseData.itemRefs;
+            } else if (responseData.items && Array.isArray(responseData.items)) {
+                items = responseData.items;
+            } else if (responseData.data && Array.isArray(responseData.data)) {
+                items = responseData.data;
+            } else {
+                console.error('Unexpected response structure:', responseData);
+                throw new Error('Invalid response format');
+            }
+            
+            console.log('Items array:', items.length, items);
+            
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                
+                // Truncate long item names for display
+                let displayName = `${item.id} - ${item.name}`;
+                if (displayName.length > 50) {
+                    displayName = displayName.substring(0, 47) + '...';
+                }
+                option.textContent = displayName;
+                option.title = `${item.id} - ${item.name}`; // Full name in tooltip
+                itemSelector.appendChild(option);
+            });
+            
+            itemSelector.disabled = false;
+            console.log('Items loaded successfully, selector enabled');
+        } catch (error) {
+            console.error('Error loading items:', error);
+        }
+    }
+
+    async function loadMultipleItems() {
+        const trackerSelector = document.getElementById('multipleTrackerSelector');
+        const itemSelector = document.getElementById('multipleItemSelector');
+        
+        console.log('loadMultipleItems called, tracker value:', trackerSelector.value);
+        
+        itemSelector.innerHTML = '<option value="">아이템 선택</option>';
+        itemSelector.disabled = true;
+        
+        if (!trackerSelector.value) {
+            console.log('No tracker selected, returning');
+            return;
+        }
+        
+        try {
+            const apiUrl = `/api/codebeamer/trackers/${trackerSelector.value}/items`;
+            console.log('Fetching items from:', apiUrl);
+            
+            const response = await fetch(apiUrl, {
+                method: 'GET',
+                credentials: 'include'
+            });
+            
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API error response:', errorText);
+                throw new Error(`Failed to fetch items: ${response.status} ${errorText}`);
+            }
+            
+            const responseData = await response.json();
+            console.log('Raw response data:', responseData);
+            
+            // Handle different response structures
+            let items;
+            if (Array.isArray(responseData)) {
+                items = responseData;
+            } else if (responseData.itemRefs && Array.isArray(responseData.itemRefs)) {
+                items = responseData.itemRefs;
+            } else if (responseData.items && Array.isArray(responseData.items)) {
+                items = responseData.items;
+            } else if (responseData.data && Array.isArray(responseData.data)) {
+                items = responseData.data;
+            } else {
+                console.error('Unexpected response structure:', responseData);
+                throw new Error('Invalid response format');
+            }
+            
+            console.log('Items array:', items.length, items);
+            
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.id;
+                
+                // Truncate long item names for display
+                let displayName = `${item.id} - ${item.name}`;
+                if (displayName.length > 50) {
+                    displayName = displayName.substring(0, 47) + '...';
+                }
+                option.textContent = displayName;
+                option.title = `${item.id} - ${item.name}`; // Full name in tooltip
+                itemSelector.appendChild(option);
+            });
+            
+            itemSelector.disabled = false;
+            console.log('Items loaded successfully, selector enabled');
+        } catch (error) {
+            console.error('Error loading items:', error);
+        }
+    }
+
 </script>
 
 </body>

@@ -11,8 +11,8 @@
   
   <body>
     <header class="header">
-        <div class="logo"><a href="https://www.mdsit.co.kr/index"><img src="images/mds_logo_horizontal.png" alt="Logo" /></a></div>
-        <div class="title-container"><h1>Codebeamer Connector</h1><p>Report Hub by MDS Intelligence</p></div>
+        <div class="logo"><a href="https://www.mdsit.co.kr"><img src="images/mds_logo_horizontal.png" alt="Logo" /></a></div>
+        <div class="title-container"><h1>Codebeamer Connector</h1><p>Report Hub </p></div>
         <div class="menu-container">
             <a href="/" class="menu-item <%= currentPath === '/' ? 'active' : '' %>"><img src="images/home.svg" alt="Home" />Home</a>
             <a href="/report-settings" class="menu-item <%= currentPath === '/report-settings' ? 'active' : '' %>"><img src="images/settings.svg" alt="Settings" />Settings</a>
@@ -28,35 +28,13 @@
             <h3>서버 주소</h3>
             <div class="path-container" id="server-settings-container">
                 <div class="path-input-group">
-                    <input type="text" id="server-url" class="path-input" placeholder="http://codebeamer.mdsit.co.kr:8080" value="<%= serverUrl || 'http://codebeamer.mdsit.co.kr:8080' %>" />
+                    <input type="text" id="server-url" class="path-input" placeholder="http://codebeamer.mdsit.co.kr:3008" value="<%= serverUrl || 'http://codebeamer.mdsit.co.kr:3008' %>" />
                 </div>
             </div>
         </div>
 
         <h2>리포트 경로 설정</h2>
         <p class="settings-description">각 도구의 리포트 경로를 설정해 주세요. 변경사항은 자동으로 저장됩니다.</p>
-
-        <div class="tool-section">
-            <h3>Polyspace Bugfinder</h3>
-            <div class="path-container" id="helix-path-container">
-                <div class="path-input-group">
-                    <input type="text" class="path-input" data-tool="helix" data-index="0" placeholder="Enter report path" value="<%= helixPath %>" />
-                    <button class="remove-path-btn" onclick="removePath(this)" disabled>-</button>
-                </div>
-                <button class="add-path-btn" onclick="addPath('helix')">+ 리포트 경로 추가</button>
-            </div>
-        </div>
-
-        <div class="tool-section">
-            <h3>Simulink (정적검증)</h3>
-            <div class="path-container" id="codesonar-path-container">
-                <div class="path-input-group">
-                    <input type="text" class="path-input" data-tool="codesonar" data-index="0" placeholder="Enter report path" value="<%= codesonarPath %>" />
-                    <button class="remove-path-btn" onclick="removePath(this)" disabled>-</button>
-                </div>
-                <button class="add-path-btn" onclick="addPath('codesonar')">+ 리포트 경로 추가</button>
-            </div>
-        </div>
 
         <div class="tool-section">
             <h3>VectorCAST</h3>
@@ -69,17 +47,6 @@
             </div>
         </div>
 
-        <div class="tool-section">
-            <h3>Simulink (동적검증)</h3>
-            <div class="path-container" id="rapita-path-container">
-                <div class="path-input-group">
-                    <input type="text" class="path-input" data-tool="rapita" data-index="0" placeholder="Enter report path" value="<%= rapitaPath %>" />
-                    <button class="remove-path-btn" onclick="removePath(this)" disabled>-</button>
-                </div>
-                <button class="add-path-btn" onclick="addPath('rapita')">+ 리포트 경로 추가</button>
-            </div>
-        </div>
-
         <div class="status-message" id="status-message"></div>
     </div>
 
@@ -89,7 +56,7 @@
             if (savedServerUrl) document.getElementById('server-url').value = savedServerUrl;
             document.getElementById('server-url').addEventListener('input', saveServerSettings);
 
-            const tools = ['helix', 'codesonar', 'vectorcast', 'rapita'];
+            const tools = ['vectorcast'];
             tools.forEach(tool => {
                 const savedPaths = JSON.parse(localStorage.getItem(`${tool}AdditionalPaths`) || '[]');
                 savedPaths.forEach(path => addSavedPath(tool, path));

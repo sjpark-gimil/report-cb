@@ -241,7 +241,7 @@ html, body {
     margin: 140px auto;
     padding: 100px;
     border-radius: 8px;
-    border-top: 6px solid #333;
+    border-top: 3px solid #333;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     background-color: white;
 }
@@ -300,10 +300,10 @@ strong {
 }
 
 .pipeline-container {
-    max-width: 900px;
+    max-width: 1280px;
     margin: 0 auto;
     padding: 40px;
-    border-top: 6px solid #333;
+    border-top: 3px solid #333;
     border-radius: 2px;
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
     display: flex;
@@ -320,7 +320,7 @@ strong {
     margin-top: 20px;
     align-items: center;
     width: 100%;
-    max-width: 900px;
+    max-width: 1280px;
 }
 
 .pipeline-form input {
@@ -335,7 +335,7 @@ strong {
 .pipeline-container h2 {
     font-size: 24px;
     font-weight: bold;
-    margin-top: -10px;
+    margin-bottom: 10px;
     text-align: center;
 }
 
@@ -415,12 +415,12 @@ strong {
 }
 
 .input-container {
-    position: relative;
     width: 100%;
     display: flex;
     align-items: center;
-    justify-content: center;
+    gap: 15px;
     box-sizing: border-box;
+    flex-wrap: wrap;
 }
 
 .input-container input {
@@ -435,8 +435,6 @@ strong {
 
 .input-container .inline-button {
     padding: 10px 15px;
-    position: absolute;
-    right: 0;
     font-size: 14px;
     border-radius: 4px;
     background-color: #333;
@@ -445,7 +443,7 @@ strong {
     cursor: pointer;
     white-space: nowrap;
     transition: all 0.2s ease;
-    height: 100%;
+    flex-shrink: 0;
 }
 
 .input-container .inline-button:hover {
@@ -609,13 +607,13 @@ strong {
     font-weight: 500;
 }
 
-.status-message.success {
+.status-message.success, .result-item.success {
     background-color: #d4edda;
     color: #155724;
     border: 1px solid #c3e6cb;
 }
 
-.status-message.error {
+.status-message.error, .result-item.error {
     background-color: #f8d7da;
     color: #721c24;
     border: 1px solid #f5c6cb;
@@ -694,8 +692,10 @@ select.report-select option {
     width: 97%;
 }
 
-.upload-icon {
-    display: none;
+/* Specific style for vectorcast file info without remove button */
+#vectorcastFileInfo {
+    justify-content: center;
+    font-weight: 500;
 }
 
 /* Multiple file upload styles */
@@ -825,6 +825,19 @@ select.report-select option {
     background-color: #d6eeff;
 }
 
+.upload-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.upload-buttons .custom-file-button {
+    margin-top: 0;
+    flex: 1;
+    max-width: 120px;
+}
+
 /* Disabled card styles */
 .pipeline-container.disabled {
     opacity: 0.35;
@@ -916,4 +929,319 @@ select.report-select option {
 .summary-value.bad {
     color: #dc3545;
 }
+
+/* Warning text emphasis styles */
+.warning-text {
+    background-color: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+    border-radius: 4px;
+    padding: 10px 12px;
+    margin: 10px 0;
+    font-size: 13px;
+    font-weight: 500;
+    border-left: 4px solid #ffc107;
+}
+
+.warning-text.critical {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+    border-left: 4px solid #dc3545;
+}
+
+.warning-text strong {
+    font-weight: 600;
+    color: #d63384;
+}
+
+/* Multiple Actions Styles */
+.multiple-actions-container {
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 15px;
+    background-color: #f8f9fa;
+    width: 97%;
+}
+
+.multiple-actions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.multiple-actions-header span {
+    font-weight: 500;
+    color: #333;
+    font-size: 14px;
+}
+
+.add-action-btn {
+    background-color: #e6f7ff;
+    color: #00B5ED;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.add-action-btn:hover {
+    background-color: #d6eeff;
+}
+
+.vectorcast-action {
+    margin-bottom: 10px;
+    padding: 12px;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+}
+
+.action-inputs {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+
+.action-item-id {
+    flex: 0 0 120px;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.selector-container {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
+/* Single report selectors - wider */
+.selector-container select {
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+    cursor: pointer;
+    min-width: 300px;
+    max-width: 500px;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Multiple report selectors - narrower */
+#multipleProjectSelector,
+#multipleTrackerSelector,
+#multipleItemSelector {
+    min-width: 150px !important;
+    max-width: 250px !important;
+}
+
+.selector-container select:disabled {
+    background-color: #f5f5f5;
+    color: #999;
+    cursor: not-allowed;
+}
+
+.selector-container select:focus {
+    outline: none;
+    border-color: #00B5ED;
+    box-shadow: 0 0 0 2px rgba(0, 181, 237, 0.2);
+}
+
+.selector-container select option {
+    padding: 5px 8px;
+    font-size: 14px;
+    background-color: white;
+    color: #333;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-select-btn {
+    background-color: #e6f7ff;
+    color: #00B5ED;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.file-select-btn:hover {
+    background-color: #d6eeff;
+}
+
+.action-file-name {
+    flex: 1;
+    font-size: 14px;
+    color: #666;
+    min-width: 150px;
+    max-width: 250px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.action-file-name.has-file {
+    color: #333;
+    font-weight: 500;
+}
+
+.action-view-codebeamer, .action-view-report {
+    background-color: #333;
+    color: #00B5ED;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.action-view-codebeamer:hover, .action-view-report:hover {
+    background-color: #d6eeff;
+    color: #00B5ED;
+}
+
+.remove-action-btn {
+    background-color: #ffecec;
+    border: none;
+    color: #dc3545;
+    font-size: 16px;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.remove-action-btn:hover {
+    background-color: #ffd5d5;
+}
+
+.multiple-actions-controls {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+}
+
+.multiple-actions-controls .inline-button {
+    position: static;
+    height: auto;
+    padding: 10px 20px;
+    background-color: #333;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.multiple-actions-controls .inline-button:hover {
+    background-color: #00B5ED;
+}
+
+/* Bulk Results Styles */
+.bulk-results {
+    margin-top: 15px;
+    padding: 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background-color: #f8f9fa;
+}
+
+.bulk-results h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    color: #333;
+}
+
+.result-item {
+    padding: 8px 12px;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.result-item:last-child {
+    margin-bottom: 0;
+}
+
+.action-file-drop-zone {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border: 2px dashed #ddd;
+    border-radius: 4px;
+    background-color: #fafafa;
+    transition: all 0.3s ease;
+    flex: 1;
+    min-width: 300px;
+    max-width: 400px;
+}
+
+.action-file-drop-zone:hover {
+    border-color: #00B5ED;
+    background-color: #f8f9fa;
+}
+
+.action-file-drop-zone.drag-over {
+    border-color: #00B5ED;
+    background-color: #e6f7ff;
+}
+
+.action-file-drop-zone .action-file-name {
+    flex: 1;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 250px;
+}
+
+.action-view-codebeamer, .action-view-report {
+    background-color: #333;
+    color: #00B5ED;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.action-view-codebeamer:hover, .action-view-report:hover {
+    background-color: #d6eeff;
+    color: #333;
+}
+
+
 

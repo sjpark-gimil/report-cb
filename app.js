@@ -6,11 +6,9 @@ const path = require('path');
 const cors = require('cors');
 
 const defaults = {
-    cbApiUrl: 'http://codebeamer.mdsit.co.kr:8080',
-    cbWebUrl: 'http://codebeamer.mdsit.co.kr:8080',
+    cbApiUrl: 'http://codebeamer.mdsit.co.kr:3008',
+    cbWebUrl: 'http://codebeamer.mdsit.co.kr:3008',
     sessionSecret: 'default-secret',
-    codesonarHost: 'localhost',
-    codesonarPort: '7340'
 };
 
 function normalizePath(filePath) {
@@ -23,7 +21,7 @@ function normalizePath(filePath) {
     return normalized;
 }
 
-let reportPaths = { helix: '', codesonar: '', vectorcast: '', rapita: '' };
+let reportPaths = { vectorcast: '' };
 
 const app = express();
 const PORT = 3007;
@@ -78,175 +76,6 @@ function startApp() {
     }
 }
 
-// ----------------------------- Helix QAC -----------------------------
-function findLatestReport() {
-    const reportsDir = reportPaths.helix;
-    if (!reportsDir || !fs.existsSync(reportsDir)) {
-        return null;
-    }
-
-    const stats = fs.statSync(reportsDir);
-    if (stats.isFile()) {
-        return reportsDir;
-    }
-
-    try {
-        const files = fs.readdirSync(reportsDir);
-        const reportFiles = files.filter(file => {
-            const matches = file.match(/_SCR_.*\.html$/);
-            return matches !== null;
-        });
-
-        if (reportFiles.length === 0) {
-            return null;
-        }
-        
-        const latestReport = reportFiles.reduce((latest, file) => {
-            const latestTime = extractTimestamp(latest);
-            const fileTime = extractTimestamp(file);
-            return fileTime > latestTime ? file : latest;
-        });
-
-        return path.join(reportsDir, latestReport);
-    } catch (error) {
-        console.error("Error finding latest report:", error);
-        return null;
-    }
-}
-
-function extractTimestamp(filename) {
-    const match = filename.match(/_SCR_(\d{2})(\d{2})(\d{4})_(\d{2})(\d{2})(\d{2})\.html$/);
-    if (match) {
-        const [_, day, month, year, hours, minutes, seconds] = match;
-        return new Date( parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes), parseInt(seconds) );
-    }
-    return new Date(0);
-}
-
-function extractHelixSummary(html) {
-    const violations = parseInt((html.match(/Total number of rule violations<\/td><td style="text-align:right;">(\d+)<\/td>/) || [])[1] || "0", 10);
-    const compliant = parseInt((html.match(/Rules Compliant \((\d+)\)/) || [])[1] || "0", 10);
-    const totalLinesOfCode = parseInt((html.match(/Lines of Code \(LOC\)<\/td><td style="text-align:right;">(\d+)<\/td>/) || [])[1] || "0", 10);
-    const parserErrors = parseInt((html.match(/Total number of parser errors<\/td><td style="text-align:right;">(\d+)<\/td>/) || [])[1] || "0", 10);
-    const rulesWithViolations = parseInt((html.match(/Rules with Violations \((\d+)\)/) || [])[1] || "0", 10);
-    const rulesCompliant = compliant;
-    const totalRules = compliant + rulesWithViolations;
-    const rulesComplianceRatio = rulesWithViolations / totalRules || 0;
-    const violationsRatio = violations / totalLinesOfCode || 0;
-    const lastAnalysisDateTimeMatch = html.match(/Last analysis date<\/td><td[^>]*>(.*?)<\/td>/);
-
-    let lastAnalysisDateTime = lastAnalysisDateTimeMatch ? lastAnalysisDateTimeMatch[1] : "N/A";
-    if (lastAnalysisDateTime !== "N/A") {
-        const [day, month, year, time] = lastAnalysisDateTime.match(/(\d{2})\s(\w+)\s(\d{4})\sat\s(\d{2}:\d{2}:\d{2})/).slice(1);
-        const months = { Jan: "1", Feb: "2", Mar: "3", Apr: "4", May: "5", Jun: "6", Jul: "7", Aug: "8", Sep: "9", Oct: "10", Nov: "11", Dec: "12" };
-        lastAnalysisDateTime = `${year}년 ${months[month]}월 ${day}일 ${time}`;
-    }
-
-    const rulesetMatch = html.match(/Ruleset applied\s*<\/td><td[^>]*>(.*?)<\/td>/);
-    const ruleset = rulesetMatch ? rulesetMatch[1] : "알수없음";
-
-    return {
-        total: totalLinesOfCode,
-        compliant: rulesCompliant,
-        violations,
-        rulesComplianceRatio: rulesComplianceRatio || 0,
-        violationsRatio: violationsRatio || 0,
-        parserErrors,
-        rulesWithViolations,
-        lastAnalysisDateTime,
-        ruleset,
-    };
-}
-
-// ----------------------------- CodeSonar -----------------------------
-async function extractCodeSonarSummary() {
-    try {
-        const codesonarSettings = {
-            projectPath: '',
-            host: 'localhost',
-            port: '7340',
-            user: 'Administrator',
-            password: 'Codesonar7340',
-            highScoreThreshold: 60
-        };
-        
-        const projectName = "asdf";
-        const aidPath = path.join(codesonarSettings.projectPath, `${projectName}.prj_files`, 'aid.txt');
-        
-        if (!fs.existsSync(aidPath)) {
-            console.error("aid.txt file not found at:", aidPath);
-            return null;
-        }
-
-        const aid = fs.readFileSync(aidPath, 'utf8').trim();
-        const apiUrl = `http://${codesonarSettings.host}:${codesonarSettings.port}/analysis/${aid}.json`;     
-        const auth = Buffer.from(`${codesonarSettings.user}:${codesonarSettings.password}`).toString('base64');      
-        const response = await axios.get(apiUrl, {
-            headers: { 'Authorization': `Basic ${auth}`, 'Accept': 'application/json' },
-            timeout: 5000
-        });
-
-        const data = response.data;
-        
-        if (!data) { 
-            console.error("No data received from API");
-            return null;
-        }
-
-        if (!Array.isArray(data.rows)) { 
-            console.error("Invalid data format. Expected rows array.");
-            return null;
-        }
-
-        let highScoreCount = 0;
-        const highScoreThreshold = codesonarSettings.highScoreThreshold;
-        const specificWarningsCounts = {};
-        const reliabilityCounts = {};
-        const redundancyCounts = {};
-
-        data.rows.forEach(warning => {
-            if (!warning) return;      
-            if (warning.score > highScoreThreshold) { highScoreCount++; }
-
-            const warningClass = warning.class;
-            const significance = warning.significance?.toLowerCase();
-            if (warningClass && significance) {
-                switch (significance) {
-                    case 'security': specificWarningsCounts[warningClass] = (specificWarningsCounts[warningClass] || 0) + 1;
-                        break;
-                    case 'reliability': reliabilityCounts[warningClass] = (reliabilityCounts[warningClass] || 0) + 1;
-                        break;
-                    case 'redundancy': redundancyCounts[warningClass] = (redundancyCounts[warningClass] || 0) + 1;
-                        break;
-                }
-            }
-        });
-
-        let lastRunTime = '알수없음';
-        if (data.finished) {
-            const date = new Date(data.finished);
-            const hours = date.getHours();
-            const ampm = hours >= 12 ? '오후' : '오전';
-            const formattedHours = hours % 12 || 12;
-            
-            lastRunTime = `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 ${ampm} ${formattedHours}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
-        }
-
-        return {
-            total: data.fileCount || 0,
-            activeWarnings: data.warningCount || 0,
-            highScore: highScoreCount,
-            specificWarningsCounts,
-            reliabilityCounts,
-            redundancyCounts,
-            lastRunTime
-        };
-    } catch (error) {
-        console.error('Error extracting CodeSonar summary:', error.message);
-        return null;
-    }
-}
-
 // ----------------------------- VectorCAST -----------------------------
 function extractTimestampFromVectorCAST(dateStr, timeStr) {
     const [day, month, year] = dateStr.split(" ");
@@ -269,6 +98,51 @@ function formatDateForVectorCAST(date) {
     }
     const zeroPad = (num) => num.toString().padStart(2, "0");
     return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 (${["일", "월", "화", "수", "목", "금", "토"][date.getDay()]}) ${zeroPad(date.getHours())}:${zeroPad(date.getMinutes())}:${zeroPad(date.getSeconds())}`;
+}
+
+function extractUserCode(html) {
+    if (typeof html !== 'string') {
+        console.warn("HTML content is not a string for user code extraction");
+        return {
+            userCodeSections: [],
+            hasUserCode: false
+        };
+    }
+
+    const userCodeSections = [];
+    const h3Regex = /<h3>([^<]*User Code[^<]*)<\/h3>([\s\S]*?)(?=<h3>|<h2>|$)/gi;
+    let h3Match;
+    
+    while ((h3Match = h3Regex.exec(html)) !== null) {
+        const parentTitle = h3Match[1].trim();
+        const h3Content = h3Match[2];
+        
+        if (!parentTitle.includes('Test Case / Parameter')) {
+            const h4Regex = /<h4>([^<]*)<\/h4>\s*<pre[^>]*>([\s\S]*?)<\/pre>/gi;
+            let h4Match;
+            
+            while ((h4Match = h4Regex.exec(h3Content)) !== null) {
+                const subTitle = h4Match[1].trim();
+                const content = h4Match[2].trim();
+                
+                if (!subTitle.includes('Test Case / Parameter')) {
+                    const cleanedContent = content.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&#34;/g, '"');
+                    
+                    userCodeSections.push({
+                        title: `${parentTitle} - ${subTitle}`,
+                        content: cleanedContent
+                    });
+                }
+            }
+        }
+    }
+
+    const hasUserCode = userCodeSections.length > 0;
+
+    return {
+        userCodeSections,
+        hasUserCode
+    };
 }
 
 function extractVectorCASTSummary(html) {
@@ -302,26 +176,14 @@ function extractVectorCASTSummary(html) {
     const functionCallCoverage = functionCallCoverageMatch ? functionCallCoverageMatch[1] : "알수없음";
     const pairsCoverageMatch = html.match( /<td id="overall-results-mcdc-pairs">(.*?)<\/td>/ );
     const pairsCoverage = pairsCoverageMatch ? pairsCoverageMatch[1] : "알수없음";
-    const testCaseNotesRegex = /<h4>Notes<\/h4>\s*<pre>([\s\S]*?)<\/pre>/g;
-    let testCaseMatch;
-    const testCaseNotes = [];
-    while ((testCaseMatch = testCaseNotesRegex.exec(html)) !== null) {
-        let rawNote = testCaseMatch[1];
-        rawNote = rawNote
-          .replace(/&lt;/g, '<')
-          .replace(/&gt;/g, '>')
-          .replace(/&quot;/g, '"')
-          .replace(/&#34;/g, '"')
-          .replace(/&#39;/g, "'")
-          .replace(/&amp;/g, '&');
-        testCaseNotes.push(rawNote);
-    }
-
-    const cbaNotesRegex = /<h5>Notes<\/h5>\s*<pre>([\s\S]*?)<\/pre>/g;
+    const cbaNotesRegex = /<div class="col-md-10"><h4><a id="[^"]*"><\/a>Covered By Analysis Result File: ([^<]+)<\/h4><\/div>[\s\S]*?<table class='table table-small table-hover'>([\s\S]*?)<\/table>[\s\S]*?<h5>Notes<\/h5>\s*<pre>([\s\S]*?)<\/pre>/g;
     let cbaMatch;
     const cbaNotes = [];
     while ((cbaMatch = cbaNotesRegex.exec(html)) !== null) {
-        let rawNote = cbaMatch[1];
+        const fileName = cbaMatch[1];
+        const tableContent = cbaMatch[2];
+        let rawNote = cbaMatch[3];
+
         rawNote = rawNote
           .replace(/&lt;/g, '<')
           .replace(/&gt;/g, '>')
@@ -329,7 +191,37 @@ function extractVectorCASTSummary(html) {
           .replace(/&#34;/g, '"')
           .replace(/&#39;/g, "'")
           .replace(/&amp;/g, '&');
-        cbaNotes.push(rawNote);
+
+        const tableRows = tableContent.match(/<tr><td>&nbsp;<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td>/g);
+        const unitSubprograms = [];
+        
+        if (tableRows) {
+            tableRows.forEach(row => {
+                const rowMatch = row.match(/<tr><td>&nbsp;<\/td><td>([^<]*)<\/td><td>([^<]*)<\/td>/);
+                if (rowMatch) {
+                    const unit = rowMatch[1].trim();
+                    const subprogram = rowMatch[2].trim();
+                    if (unit && unit !== '&nbsp;' && subprogram) {
+                        unitSubprograms.push({ unit, subprogram });
+                    } else if (!unit || unit === '&nbsp;') {
+                        const lastUnit = unitSubprograms.length > 0 ? unitSubprograms[unitSubprograms.length - 1].unit : fileName;
+                        if (subprogram) {
+                            unitSubprograms.push({ unit: lastUnit, subprogram });
+                        }
+                    }
+                }
+            });
+        }
+
+        if (unitSubprograms.length === 0) {
+            unitSubprograms.push({ unit: fileName, subprogram: 'N/A' });
+        }
+        
+        cbaNotes.push({
+            fileName,
+            unitSubprograms,
+            note: rawNote
+        });
     }
     
     let passedTests = 0;
@@ -491,18 +383,16 @@ function extractVectorCASTSummary(html) {
                         if (!isEmphasisRow && !isTotalsRow) {
                             const unit = cleanCells[0] === "&nbsp;" ? "" : cleanCells[0];
                             const subprogram = cleanCells[1];
-                            const complexity = cleanCells[2];
                             const coverageMetrics = {};
                             for (let i = 0; i < metricTypes.length && i + 3 < cleanCells.length; i++) {
                                 coverageMetrics[metricTypes[i]] = cleanCells[i + 3];
                             }
 
-                            if (subprogram && complexity && Object.keys(coverageMetrics).length > 0 && 
+                            if (subprogram && Object.keys(coverageMetrics).length > 0 && 
                                 !subprogram.includes("Analysis") && !subprogram.includes("Execution")) {
                                 metricsTable.push({
                                     unit,
                                     subprogram,
-                                    complexity,
                                     coverageMetrics,
                                     metricTypes
                                 });
@@ -533,38 +423,7 @@ function extractVectorCASTSummary(html) {
         expectedsRate = "0.0";
     }
 
-    const fileNames = [];
-    const fileNameMatches = html.match(/<th>File Name<\/th><td class="testcase_file">(.*?)<\/td>/g);
-    if (fileNameMatches) {
-        fileNameMatches.forEach(match => {
-            const fileName = match.replace(/<th>File Name<\/th><td class="testcase_file">/, '').replace(/<\/td>/, '');
-            if (!fileNames.includes(fileName)) {
-                fileNames.push(fileName);
-            }
-        });
-    }
-    
-    const sourceFileMatches = html.match(/<li class=""><a href="#coverage_for_unit_[0-9]+">(.*?)<\/a><\/li>/g);
-    if (sourceFileMatches) {
-        sourceFileMatches.forEach(match => {
-            const sourceFile = match.replace(/<li class=""><a href="#coverage_for_unit_[0-9]+">/, '').replace(/<\/a><\/li>/, '');
-            if (!fileNames.includes(sourceFile)) {
-                fileNames.push(sourceFile);
-            }
-        });
-    }
-    
-    const cbaFileMatches = html.match(/<li class=""><a href="#cba_[0-9]+_CBA_(.*?)">File: CBA_(.*?)<\/a><\/li>/g);
-    if (cbaFileMatches) {
-        cbaFileMatches.forEach(match => {
-            const cbaFile = match.replace(/<li class=""><a href="#cba_[0-9]+_CBA_/, '')
-                                .replace(/">File: CBA_.*?<\/a><\/li>/, '')
-                                .replace(/ - #[0-9]+/, '');
-            if (!fileNames.includes(`CBA_${cbaFile}`)) {
-                fileNames.push(`CBA_${cbaFile}`);
-            }
-        });
-    }
+
     
     return {
         created: formattedCreated,
@@ -593,66 +452,12 @@ function extractVectorCASTSummary(html) {
         metricsTable,
         metricsType,
 
-        testCaseNotes,
         cbaNotes,
-        fileNames
+        userCode: extractUserCode(html)
     };
 }
 
-function extractRapitaSummary(html) {
-    try {
-        const exportDateMatch = html.match(/Export date<\/td><td>(.*?)<\/td>/i);
-        const lastModified = exportDateMatch ? exportDateMatch[1] : "알수없음";     
-        const rvdFilenameMatch = html.match(/RVD filename<\/td><td>(.*?)<\/td>/i);
-        const rvdFilename = rvdFilenameMatch ? rvdFilenameMatch[1] : "알수없음";       
-        const integrationNameMatch = html.match(/Integration name<\/td><td>(.*?)<\/td>/i);
-        const integrationName = integrationNameMatch ? integrationNameMatch[1] : "알수없음";    
-        const sourceFilesMatch = html.match(/Source files<\/td><td>(\d+)<\/td>/i);
-        const sourceFiles = sourceFilesMatch ? sourceFilesMatch[1] : "알수없음";
-        const statementsCoverageMatch = html.match(/<!--COV_STATEMENTS-->[\s\S]*?<td[^>]*>(\d+)%<\/td>/i);
-        const statementsCoverage = statementsCoverageMatch ? statementsCoverageMatch[1] : "알수없음";       
-        const decisionsCoverageMatch = html.match(/<!--COV_DECISIONS-->[\s\S]*?<td[^>]*>(\d+)%<\/td>/i);
-        const decisionsCoverage = decisionsCoverageMatch ? decisionsCoverageMatch[1] : "알수없음";    
-        const mcdcCoverageMatch = html.match(/<!--COV_MCDC-->[\s\S]*?<td[^>]*>(\d+)%<\/td>/i);
-        const mcdcCoverage = mcdcCoverageMatch ? mcdcCoverageMatch[1] : "알수없음";
 
-        const textFilePath = path.join(path.dirname(reportPaths.rapita), 'trig_triangle-test-results.txt');
-        let textContent = '';
-        try {
-            textContent = fs.readFileSync(textFilePath, 'utf8');
-        } catch (error) {
-            textContent = '';
-        }
-
-        let totalPassed = 0;
-        let totalFailed = 0;
-        let totalUnreached = 0;
-
-        const suiteSummaryRegex = /(\w+\.rvstest)\s+(\w+)\s+(\d+)\s+(\d+)\s+(\d+)/g;
-        let match;
-        while ((match = suiteSummaryRegex.exec(textContent)) !== null) {
-            totalPassed += parseInt(match[3]);
-            totalFailed += parseInt(match[4]);
-            totalUnreached += parseInt(match[5]);
-        }
-
-        return {
-            lastModified,
-            totalPassed,
-            totalFailed,
-            totalUnreached,
-            rvdFilename,
-            integrationName,
-            sourceFiles,
-            statementsCoverage,
-            decisionsCoverage,
-            mcdcCoverage
-        };
-    } catch (error) {
-        console.error('Error extracting Rapita summary:', error);
-        return null;
-    }
-}
 
 const requireAuth = (req, res, next) => {
     if (!req.session || !req.session.auth) {
@@ -703,10 +508,7 @@ app.get('/', requireAuth, (req, res) => {
     res.render('list', {
         currentPath: '/',
         username: req.session.username || '',
-        helixPath: reportPaths.helix || '',
-        codesonarPath: reportPaths.codesonar || '',
         vectorcastPath: reportPaths.vectorcast || '',
-        rapitaPath: reportPaths.rapita || '',
         serverUrl: defaults.cbApiUrl
     });
 });
@@ -716,10 +518,7 @@ app.post('/settings', (req, res) => {
         const { reportPaths: newPaths, serverUrl } = req.body;
         
         if (newPaths) {
-            if (newPaths.helix) reportPaths.helix = normalizePath(newPaths.helix);
-            if (newPaths.codesonar) reportPaths.codesonar = normalizePath(newPaths.codesonar);
             if (newPaths.vectorcast) reportPaths.vectorcast = normalizePath(newPaths.vectorcast);
-            if (newPaths.rapita) reportPaths.rapita = normalizePath(newPaths.rapita);
         }
         
         if (serverUrl) defaults.cbApiUrl = serverUrl;
@@ -745,8 +544,13 @@ function loadSettingsFromLocalStorage() {
                 if (value) reportPaths[key] = normalizePath(value);
             }
         }
-        if (settings.serverUrl) defaults.cbApiUrl = settings.serverUrl;
+        if (settings.serverUrl) {
+            console.log('Loading serverUrl from settings:', settings.serverUrl);
+            defaults.cbApiUrl = settings.serverUrl;
+            console.log('defaults.cbApiUrl set to:', defaults.cbApiUrl);
+        }
     } catch (error) {
+        console.log('Error loading settings:', error.message);
     }
 }
 
@@ -757,76 +561,13 @@ app.get('/settings/paths', (req, res) => {
     });
 });
 
-loadSettingsFromLocalStorage();
-
 app.get('/report-settings', requireAuth, (req, res) => {
     res.render('report-settings', {
         currentPath: '/report-settings',
         username: req.session.username || '',
-        helixPath: reportPaths.helix || '',
-        codesonarPath: reportPaths.codesonar || '',
         vectorcastPath: reportPaths.vectorcast || '',
-        rapitaPath: reportPaths.rapita || '',
         serverUrl: defaults.cbApiUrl
     });
-});
-
-app.get('/helixReport', requireAuth, (req, res) => {
-    try {
-        const reportPath = req.query.path || reportPaths.helix;
-        
-        if (!reportPath) {
-            return res.status(404).send("리포트 경로가 설정되지 않았습니다");
-        }
-
-        if (reportPath.startsWith('http://') || reportPath.startsWith('https://')) {
-            return res.redirect(reportPath);
-        }
- 
-        if (!fs.existsSync(reportPath)) {
-            console.error('Helix report file not found at:', reportPath);
-            return res.status(404).send("지정된 경로에 리포트 파일이 존재하지 않습니다");
-        }
-
-        const stats = fs.statSync(reportPath);
-        if (stats.isDirectory()) {
-            return res.status(404).send('선택한 경로는 폴더입니다. 특정 리포트 파일을 선택해주세요.');
-        }
-        
-        res.sendFile(reportPath);
-    } catch (error) {
-        console.error("Error serving Helix report:", error);
-        res.status(500).send("서버 오류가 발생하였습니다: " + error.message);
-    }
-});
-
-app.get('/codesonarReport', requireAuth, (req, res) => {
-    try {
-        const reportPath = req.query.path || reportPaths.codesonar;
-        
-        if (!reportPath) {
-            return res.status(404).send("리포트 경로가 설정되지 않았습니다");
-        }
-
-        if (reportPath.startsWith('http://') || reportPath.startsWith('https://')) {
-            return res.redirect(reportPath);
-        }
-
-        if (!fs.existsSync(reportPath)) {
-            console.error('CodeSonar report file not found at:', reportPath);
-            return res.status(404).send("지정된 경로에 리포트 파일이 존재하지 않습니다");
-        }
-
-        const stats = fs.statSync(reportPath);
-        if (stats.isDirectory()) {
-            return res.status(404).send('선택한 경로는 폴더입니다. 특정 리포트 파일을 선택해주세요.');
-        }
-        
-        res.sendFile(reportPath);
-    } catch (error) {
-        console.error("Error serving CodeSonar report:", error);
-        res.status(500).send("서버 오류가 발생하였습니다: " + error.message);
-    }
 });
 
 app.get('/vectorcastReport', requireAuth, (req, res) => {
@@ -917,16 +658,13 @@ function processMultipleVectorCASTReports(reports) {
         branchCoverageAvg: 0,
         functionCoverageAvg: 0,
         functionCallCoverageAvg: 0,
-        pairsCoverageAvg: 0,
- 
+
         totalFiles: 0,
         uniqueFiles: new Set(),
-    
-        allTestCaseNotes: [],
+
         allCbaNotes: [],
         reportCount: processedReports.length,
-        reports: processedReports,
-        fileNames: []
+        reports: processedReports
     };
 
     const extractUniqueFiles = (html) => {
@@ -1001,33 +739,16 @@ function processMultipleVectorCASTReports(reports) {
             files.forEach(file => aggregatedData.uniqueFiles.add(file));
         }
  
-        if (report.testCaseNotes && Array.isArray(report.testCaseNotes)) {
-            report.testCaseNotes.forEach(note => {
-                aggregatedData.allTestCaseNotes.push(note);
-            });
-        }
-
         if (report.cbaNotes && Array.isArray(report.cbaNotes)) {
             report.cbaNotes.forEach(note => {
                 aggregatedData.allCbaNotes.push(note);
             });
         }
 
-        if (report.fileNames && Array.isArray(report.fileNames)) {
-            report.fileNames.forEach(fileName => {
-                if (!aggregatedData.fileNames.includes(fileName)) {
-                    aggregatedData.fileNames.push(fileName);
-                }
-            });
-        }
+
     });
 
     aggregatedData.totalFiles = aggregatedData.uniqueFiles.size;
-    Array.from(aggregatedData.uniqueFiles).forEach(fileName => {
-        if (!aggregatedData.fileNames.includes(fileName)) {
-            aggregatedData.fileNames.push(fileName);
-        }
-    });
 
     let validReportCount = 0;
   
@@ -1079,18 +800,6 @@ function processMultipleVectorCASTReports(reports) {
         aggregatedData.functionCallCoverageAvg = Math.round(aggregatedData.functionCallCoverageAvg / validReportCount);
     }
 
-    validReportCount = 0;
-    processedReports.forEach(report => {
-        if (report.pairsPercentage && report.pairsPercentage !== "0") {
-            aggregatedData.pairsCoverageAvg += parseInt(report.pairsPercentage, 10);
-            validReportCount++;
-        }
-    });
-    
-    if (validReportCount > 0) {
-        aggregatedData.pairsCoverageAvg = Math.round(aggregatedData.pairsCoverageAvg / validReportCount);
-    }
-
     if (aggregatedData.totalTestCases > 0) {
         aggregatedData.passFailRate = Math.round((aggregatedData.passedTestCases / aggregatedData.totalTestCases) * 100);
     } else {
@@ -1109,10 +818,8 @@ function processMultipleVectorCASTReports(reports) {
     aggregatedData.branchCoverage = `${aggregatedData.branchCoverageAvg}%`;
     aggregatedData.functionCoverage = `${aggregatedData.functionCoverageAvg}%`;
     aggregatedData.functionCallCoverage = `${aggregatedData.functionCallCoverageAvg}%`;
-    aggregatedData.pairsCoverage = `${aggregatedData.pairsCoverageAvg}%`;
   
     const now = new Date();
-    // Format time without using zeroPad function
     const hours = now.getHours().toString().padStart(2, "0");
     const minutes = now.getMinutes().toString().padStart(2, "0");
     const seconds = now.getSeconds().toString().padStart(2, "0");
@@ -1122,52 +829,121 @@ function processMultipleVectorCASTReports(reports) {
     aggregatedData.branchPercentage = aggregatedData.branchCoverageAvg.toString();
     aggregatedData.functionPercentage = aggregatedData.functionCoverageAvg.toString();
     aggregatedData.functionCallPercentage = aggregatedData.functionCallCoverageAvg.toString();
-    aggregatedData.pairsPercentage = aggregatedData.pairsCoverageAvg.toString();
-    aggregatedData.testCaseNotes = aggregatedData.allTestCaseNotes;
     aggregatedData.cbaNotes = aggregatedData.allCbaNotes;
 
     delete aggregatedData.uniqueFiles;  
     return aggregatedData;
 }
 
-app.get('/rapitaReport', requireAuth, (req, res) => {
+
+
+function getErrorMessage(status) {
+    const errorMessages = {
+        400: "잘못된 요청입니다(Item ID 또는 리포트 파일이 없습니다)",
+        401: "인가되지 않은 사용자입니다",
+        403: "접근 권한이 없습니다",
+        404: "요청한 리소스를 찾을 수 없습니다",
+        409: "리소스 충돌이 발생했습니다",
+        500: "서버 내부 오류가 발생했습니다",
+        503: "서비스가 일시적으로 사용할 수 없습니다"
+    };
+    return errorMessages[status] || `서버 오류가 발생했습니다 (${status})`;
+}
+
+app.post('/api/codebeamer/bulk-single-reports', requireAuth, async (req, res) => {
+    if (!req.session || !req.session.auth) {
+        return res.status(401).json({ error: '인가되지 않은 사용자입니다' });
+    }
+
     try {
-        const reportPath = req.query.path || reportPaths.rapita;
+        const { reports } = req.body;
         
-        if (!reportPath) {
-            return res.status(404).send("리포트 경로가 설정되지 않았습니다");
+        if (!reports || !Array.isArray(reports) || reports.length === 0) {
+            return res.status(400).json({ error: 'No reports provided' });
         }
 
-        if (reportPath.startsWith('http://') || reportPath.startsWith('https://')) {
-            return res.redirect(reportPath);
-        }
-
-        if (!fs.existsSync(reportPath)) {
-            console.error('Rapita report file not found at:', reportPath);
-            return res.status(404).send("지정된 경로에 리포트 파일이 존재하지 않습니다");
-        }
-
-        const stats = fs.statSync(reportPath);
-        if (stats.isDirectory()) {
-            return res.status(404).send('선택한 경로는 폴더입니다. 특정 리포트 파일을 선택해주세요.');
-        }
+        const results = [];
         
-        res.sendFile(reportPath);
+        for (let i = 0; i < reports.length; i++) {
+            const report = reports[i];
+            const { itemId, reportContent } = report;
+            
+            if (!itemId || !reportContent) {
+                results.push({
+                    index: i,
+                    itemId: itemId || 'N/A',
+                    success: false,
+                    error: 'Item ID 또는 리포트 파일이 없습니다'
+                });
+                continue;
+            }
+
+            try {
+                const vectorcastData = extractVectorCASTSummary(reportContent);
+                const data = generateVectorCastCodeBeamerData(vectorcastData);
+                
+                const codebeamerUrl = `${defaults.cbApiUrl}/api/v3/items/${itemId}/fields?quietMode=false`;
+                
+                const response = await axios.put(codebeamerUrl, data, {
+                    headers: {
+                        'Authorization': `Basic ${req.session.auth}`,
+                        'Content-Type': 'application/json',
+                        'accept': 'application/json'
+                    },
+                    validateStatus: status => status < 500
+                });
+
+                if (response.status >= 400) {
+                    results.push({
+                        index: i,
+                        itemId: itemId,
+                        success: false,
+                        error: getErrorMessage(response.status),
+                        details: response.data
+                    });
+                } else {
+                    results.push({
+                        index: i,
+                        itemId: itemId,
+                        success: true,
+                        message: '성공적으로 업데이트되었습니다'
+                    });
+                }
+            } catch (error) {
+                results.push({
+                    index: i,
+                    itemId: itemId,
+                    success: false,
+                    error: error.message
+                });
+            }
+        }
+
+        const successCount = results.filter(r => r.success).length;
+        const failureCount = results.length - successCount;
+
+        res.json({
+            totalReports: reports.length,
+            successCount,
+            failureCount,
+            results
+        });
+
     } catch (error) {
-        console.error("Error serving Rapita report:", error);
-        res.status(500).send("서버 오류가 발생하였습니다: " + error.message);
+        console.error('Error in bulk single reports processing:', error);
+        res.status(500).json({ error: 'Internal server error: ' + error.message });
     }
 });
 
 app.put('/api/codebeamer/items/:itemId/fields', requireAuth, async (req, res) => {
     if (!req.session || !req.session.auth) {
-        return res.status(401).json({ error: 'No valid session' });
+        return res.status(401).json({ error: '인가되지 않은 사용자입니다' });
     }
     
     let data = {};
     const { itemId } = req.params;
     const { type, path: selectedPath } = req.query;
-    const codebeamerUrl = `${defaults.cbApiUrl}/cb/api/v3/items/${itemId}/fields?quietMode=false`;
+    const codebeamerUrl = `${defaults.cbApiUrl}/api/v3/items/${itemId}/fields?quietMode=false`;
     
     console.log("CodeBeamer API URL:", codebeamerUrl);
     console.log("Request type:", type);
@@ -1218,7 +994,7 @@ app.put('/api/codebeamer/items/:itemId/fields', requireAuth, async (req, res) =>
                     if (response.status >= 400) {
                         console.error('Error response from server:', response.status, response.data);
                         return res.status(response.status).json({
-                            error: `Server returned ${response.status}`,
+                            error: getErrorMessage(response.status),
                             details: response.data
                         });
                     }
@@ -1289,7 +1065,7 @@ app.put('/api/codebeamer/items/:itemId/fields', requireAuth, async (req, res) =>
                     if (response.status >= 400) {
                         console.error('Error response from server:', response.status, response.data);
                         return res.status(response.status).json({
-                            error: `Server returned ${response.status}`,
+                            error: getErrorMessage(response.status),
                             details: response.data
                         });
                     }
@@ -1305,66 +1081,6 @@ app.put('/api/codebeamer/items/:itemId/fields', requireAuth, async (req, res) =>
         }
         
         switch (type) {
-            case 'helix': {
-                const reportPath = selectedPath || findLatestReport();
-                if (!reportPath) {
-                    throw new Error('No Helix QAC report found');
-                }
-                
-                const reportContent = fs.readFileSync(reportPath, 'utf8');
-                const helixData = extractHelixSummary(reportContent);
-                const violationsRatioPercentage = (helixData.violationsRatio * 100).toFixed(2);
-                const rulesComplianceRatioPercentage = (helixData.rulesComplianceRatio * 100).toFixed(2);
-                data = {
-                    fieldValues: [{
-                        fieldId: 80,
-                        name: "Description",
-                        value: `[Helix QAC]\n\n최종 분석 시각: '${helixData.lastAnalysisDateTime}'\n\n코딩룰 전체 분석 코드: ${helixData.total}\n\n코딩룰 위반 코드: ${helixData.violations}\n\n코딩룰 위반율: ${violationsRatioPercentage}%\n\n적용된 룰 셋: '${helixData.ruleset}'\n\n룰 위반 개수: ${helixData.rulesWithViolations}\n\n룰 위반율: ${rulesComplianceRatioPercentage}%\n\n파싱 오류: ${helixData.parserErrors}`,
-                        sharedFieldNames: [],
-                        type: "WikiTextFieldValue"
-                    }]
-                };
-                break;
-            }
-            case 'codesonar': {
-                if (selectedPath) {
-                    if (!fs.existsSync(selectedPath)) {
-                        throw new Error('CodeSonar report not found at: ' + selectedPath);
-                    }
-                    
-                    const reportContent = fs.readFileSync(selectedPath, 'utf8');
-                    const codesonarData = await extractCodeSonarSummary();
-                    if (!codesonarData) {
-                        throw new Error('Failed to extract CodeSonar data');
-                    }
-                    const highScorePercentage = ((codesonarData.highScore / codesonarData.activeWarnings) * 100).toFixed(2);
-                    data = {
-                        fieldValues: [{
-                            fieldId: 80,
-                            name: "Description",
-                            value: `[CodeSonar]\n\n최종 분석 시각: '${codesonarData.lastRunTime}'\n\n분석 파일 수: ${codesonarData.total}\n\n전체 경고 수: ${codesonarData.activeWarnings}\n\n심각도 높은 경고 수: ${codesonarData.highScore}\n\n심각도 비율: ${highScorePercentage}%`,
-                            sharedFieldNames: [],
-                            type: "WikiTextFieldValue"
-                        }]
-                    };
-                } else {
-                    const codesonarData = await extractCodeSonarSummary();
-                    if (!codesonarData) {
-                        throw new Error('Failed to extract CodeSonar data');
-                    }
-                    const highScorePercentage = ((codesonarData.highScore / codesonarData.activeWarnings) * 100).toFixed(2);
-                    data = {
-                        fieldValues: [{
-                            fieldId: 80,
-                            name: "Description",
-                            value: `[CodeSonar]\n\n최종 분석 시각: '${codesonarData.lastRunTime}'\n\n분석 파일 수: ${codesonarData.total}\n\n전체 경고 수: ${codesonarData.activeWarnings}\n\n심각도 높은 경고 수: ${codesonarData.highScore}\n\n심각도 비율: ${highScorePercentage}%`,
-                            sharedFieldNames: [],
-                            type: "WikiTextFieldValue"
-                        }]
-                    };
-                }
-                break;
-            }
             case 'vectorcast': {
                 const reportPath = selectedPath || reportPaths.vectorcast;
                 if (!reportPath) {
@@ -1392,29 +1108,6 @@ app.put('/api/codebeamer/items/:itemId/fields', requireAuth, async (req, res) =>
                 }
                 break;
             }
-            case 'rapita': {
-                const reportPath = selectedPath || reportPaths.rapita;
-                if (!reportPath) {
-                    throw new Error('Rapita report path not found');
-                }
-                
-                if (!fs.existsSync(reportPath)) {
-                    throw new Error('Rapita report not found at: ' + reportPath);
-                }
-                
-                const reportContent = fs.readFileSync(reportPath, 'utf8');
-                const rapitaData = extractRapitaSummary(reportContent);
-                data = {
-                    fieldValues: [{
-                        fieldId: 80,
-                        name: "Description",
-                        value: `%%tabbedSection\n\n%%tab-Overview\n!3 Rapita Summary\n\n${rapitaData.lastModified !== "알수없음" ? `\n최종 분석 시각: '${rapitaData.lastModified}'\n\n` : ''}${rapitaData.rvdFilename !== "알수없음" ? `\n프로젝트명: '${rapitaData.rvdFilename}'\n\n` : ''}${rapitaData.integrationName !== "알수없음" ? `\n통합 테스트명: '${rapitaData.integrationName}'\n\n` : ''}${rapitaData.statementsCoverage !== "알수없음" ? `\nStatement Coverage: '${rapitaData.statementsCoverage}'\n\n` : ''}${rapitaData.decisionsCoverage !== "알수없음" ? `\nDecision Coverage: '${rapitaData.decisionsCoverage}'\n\n` : ''}${rapitaData.mcdcCoverage !== "알수없음" ? `\nMC/DC Coverage: '${rapitaData.mcdcCoverage}'\n\n` : ''}`,
-                        sharedFieldNames: [],
-                        type: "WikiTextFieldValue"
-                    }]
-                };
-                break;
-            }
             default:
                 throw new Error('Invalid tool type specified');
         }
@@ -1439,7 +1132,7 @@ app.put('/api/codebeamer/items/:itemId/fields', requireAuth, async (req, res) =>
         if (response.status >= 400) {
             console.error('Error response from server:', response.status, response.data);
             return res.status(response.status).json({
-                error: `Server returned ${response.status}`,
+                error: getErrorMessage(response.status),
                 details: response.data
             });
         }
@@ -1461,30 +1154,117 @@ app.put('/api/codebeamer/items/:itemId/fields', requireAuth, async (req, res) =>
                     console.error('Cannot stringify response data');
                 }
             }
+
+            return res.status(error.response.status).json({
+                error: getErrorMessage(error.response.status),
+                details: error.response.data
+            });
         } else if (error.request) {
             console.error('No response received from server');
-        } else {
-            console.error('Error details:', error);
-        }
-        
-        if (error.response && error.response.data) {
-            return res.status(error.response.status).json(error.response.data);
+            return res.status(500).json({ 
+                error: "서버로부터 응답을 받지 못했습니다",
+                details: 'No response received from server'
+            });
         }
         
         res.status(500).json({ 
-            error: error.message,
-            details: 'No response details available'
+            error: "서버 오류가 발생했습니다",
+            details: error.message
         });
+    }
+});
+
+app.get('/api/codebeamer/projects', requireAuth, async (req, res) => {
+    if (!req.session || !req.session.auth) {
+        return res.status(401).json({ error: '인가되지 않은 사용자입니다' });
+    }
+
+    try {
+        const codebeamerUrl = `${defaults.cbApiUrl}/api/v3/projects`;
+        console.log('Fetching projects from:', codebeamerUrl);
+        
+        const response = await axios.get(codebeamerUrl, {
+            headers: {
+                'Authorization': `Basic ${req.session.auth}`,
+                'Content-Type': 'application/json',
+                'accept': 'application/json'
+            }
+        });
+
+        res.json(response.data);
+    } catch (error) {
+        console.error('Error fetching projects:', error.message);
+        res.status(500).json({ error: 'Failed to fetch projects' });
+    }
+});
+
+app.get('/api/codebeamer/projects/:projectId/trackers', requireAuth, async (req, res) => {
+    if (!req.session || !req.session.auth) {
+        return res.status(401).json({ error: '인가되지 않은 사용자입니다' });
+    }
+
+    try {
+        const { projectId } = req.params;
+        const codebeamerUrl = `${defaults.cbApiUrl}/api/v3/projects/${projectId}/trackers`;
+        
+        const response = await axios.get(codebeamerUrl, {
+            headers: {
+                'Authorization': `Basic ${req.session.auth}`,
+                'Content-Type': 'application/json',
+                'accept': 'application/json'
+            }
+        });
+
+        res.json(response.data);
+    } catch (error) {
+        console.error('Error fetching trackers:', error.message);
+        res.status(500).json({ error: 'Failed to fetch trackers' });
+    }
+});
+
+app.get('/api/codebeamer/trackers/:trackerId/items', requireAuth, async (req, res) => {
+    if (!req.session || !req.session.auth) {
+        return res.status(401).json({ error: '인가되지 않은 사용자입니다' });
+    }
+
+    try {
+        const { trackerId } = req.params;
+        const codebeamerUrl = `${defaults.cbApiUrl}/api/v3/trackers/${trackerId}/items`;
+        
+        const response = await axios.get(codebeamerUrl, {
+            headers: {
+                'Authorization': `Basic ${req.session.auth}`,
+                'Content-Type': 'application/json',
+                'accept': 'application/json'
+            }
+        });
+
+        res.json(response.data);
+    } catch (error) {
+        console.error('Error fetching items:', error.message);
+        res.status(500).json({ error: 'Failed to fetch items' });
     }
 });
 
 function generateVectorCastCodeBeamerData(vectorcastData) {
     console.log("Generating CodeBeamer data structure for VectorCAST data");
+
+    function hasValidCoverage(coverage) {
+        if (!coverage || coverage === "알수없음") {
+            return false;
+        }
+
+        if (coverage.match(/^0\s*\/\s*0\s*\(\s*0%\s*\)$/) || coverage === "0%") {
+            return false;
+        }
+        
+        return true;
+    }
     
     let metricsTableHtml = '';
     if (vectorcastData.metricsTable && vectorcastData.metricsTable.length > 0 && 
         vectorcastData.metricsTable[0]?.metricTypes?.length > 0) {
-        metricsTableHtml = `\n\n!3Metrics (${vectorcastData.metricsType})\n\n|| Unit || Subprogram || Complexity`;
+        metricsTableHtml = `\n\n!3Metrics (${vectorcastData.metricsType})\n\n|| Unit || Subprogram`;
         
         vectorcastData.metricsTable[0].metricTypes.forEach(type => {
             metricsTableHtml += ` || ${type}`;
@@ -1493,7 +1273,7 @@ function generateVectorCastCodeBeamerData(vectorcastData) {
         metricsTableHtml += `\n`;
         
         vectorcastData.metricsTable.forEach(row => {
-            let rowHtml = `| ${row.unit || '&nbsp;'} | ${row.subprogram} | ${row.complexity}`;
+            let rowHtml = `| ${row.unit || '&nbsp;'} | ${row.subprogram}`;
             
             row.metricTypes.forEach(type => {
                 const coverage = row.coverageMetrics[type] || 'N/A';
@@ -1509,7 +1289,7 @@ function generateVectorCastCodeBeamerData(vectorcastData) {
                     if (percentMatch) {
                         const percentage = parseInt(percentMatch[1]);
                         coverageColor = percentage === 0 ? "#dc3545" :      // red (fail)
-                                      percentage < 90 ? "#ffc107" :         // yellow/amber (warning)
+                                      percentage < 99 ? "#ffc107" :         // yellow/amber (warning)
                                       "#28a745";                            // green (success)
                     } 
                     else if (formattedCoverage.includes("danger") || formattedCoverage.includes("no-cvg") || formattedCoverage.includes("0 / ")) {
@@ -1542,6 +1322,61 @@ function generateVectorCastCodeBeamerData(vectorcastData) {
         expectedsFailRate = vectorcastData.expectedsRate || '0.0';
     }
 
+    let coverageLines = '';
+    
+    if (hasValidCoverage(vectorcastData.statementCoverage)) {
+        coverageLines += `* Statement Coverage: ${vectorcastData.statementCoverage}\n\n`;
+    }
+    
+    if (hasValidCoverage(vectorcastData.branchCoverage)) {
+        coverageLines += `* Branch Coverage: ${vectorcastData.branchCoverage}\n\n`;
+    }
+    
+    if (hasValidCoverage(vectorcastData.functionCoverage)) {
+        coverageLines += `* Function Coverage: ${vectorcastData.functionCoverage}\n\n`;
+    }
+    
+    if (hasValidCoverage(vectorcastData.functionCallCoverage)) {
+        coverageLines += `* Function Call Coverage: ${vectorcastData.functionCallCoverage}\n\n`;
+    }
+    
+    if (hasValidCoverage(vectorcastData.pairsCoverage)) {
+        coverageLines += `* Pairs Coverage: ${vectorcastData.pairsCoverage}\n\n`;
+    }
+
+    // Generate User Code tab content if user code exists
+    let userCodeTab = '';
+    if (vectorcastData.userCode && vectorcastData.userCode.hasUserCode) {
+        // Group sections by parent title
+        const groupedSections = {};
+        vectorcastData.userCode.userCodeSections.forEach(section => {
+            const [parentTitle, subTitle] = section.title.split(' - ');
+            if (!groupedSections[parentTitle]) {
+                groupedSections[parentTitle] = [];
+            }
+            groupedSections[parentTitle].push({
+                subTitle: subTitle,
+                content: section.content
+            });
+        });
+
+        userCodeTab = `
+%%tab-User_Code
+!3 User Code
+
+${Object.keys(groupedSections).map(parentTitle => `
+!4 ${parentTitle}
+
+${groupedSections[parentTitle].map(sub => `
+!5 ${sub.subTitle}
+{{{
+${sub.content}
+}}}
+`).join('\n')}`).join('\n')}%%
+
+`;
+    }
+
     let wikiContent = `%%tabbedSection
 
 %%tab-Overview
@@ -1553,22 +1388,18 @@ ${vectorcastData.created !== "알수없음" ? `* 최종 분석 시각: ${vectorc
 ${vectorcastData.passFailRate !== undefined ? `* 테스트케이스 성공률: ${vectorcastData.passFailRate}%\n\n` : ''}
 * 기댓값: ${expectedsValue}\n\n
 * 기댓값 실패율: ${expectedsFailRate}%\n\n
-* Statement Coverage: ${vectorcastData.statementCoverage !== "알수없음" ? vectorcastData.statementCoverage : '0 / 0 (0%)'}\n\n
-* Branch Coverage: ${vectorcastData.branchCoverage !== "알수없음" ? vectorcastData.branchCoverage : '0 / 0 (0%)'}\n\n
-${vectorcastData.functionCoverage !== "알수없음" ? `* Function Coverage: ${vectorcastData.functionCoverage}\n\n` : ''}
-${vectorcastData.functionCallCoverage !== "알수없음" ? `* Function Call Coverage: ${vectorcastData.functionCallCoverage}\n\n` : ''}
-${vectorcastData.pairsCoverage !== "알수없음" ? `* Pairs Coverage: ${vectorcastData.pairsCoverage}\n\n` : ''}
-%%
+${coverageLines}%%
 
 %%tab-Charts
 !3 VectorCAST Test Results
-
+!3 Test Cases: ${testCaseResult}\n\n
 [{ PieChart title='Test Cases' threed='true'
 
 Successful, ${vectorcastData.passedTests || vectorcastData.passedTestCases || 0}
 Failure, ${vectorcastData.failedTests || vectorcastData.failedTestCases || 0}
 }]
 
+!3 Expected Values: ${expectedsValue}\n\n
 [{ PieChart title='Expected Values' threed='true'
 
 Successful, ${vectorcastData.passedExpects || vectorcastData.passedExpecteds || 99}
@@ -1576,32 +1407,18 @@ Failure, ${vectorcastData.failedExpects || vectorcastData.failedExpecteds || 0}
 }]
 %%
 
-%%tab-Files
-!3 Files
-
-${vectorcastData.fileNames && vectorcastData.fileNames.length > 0 ? 
-  vectorcastData.fileNames.map(fileName => `* ${fileName}`).join('\n') : 
-  "No files found in the report."}
-%%
-
 %%tab-Metrics
 !3 ${metricsTableHtml}
 %%
 
-%%tab-Notes
-!3 Test Case Notes
-
-${vectorcastData.testCaseNotes && vectorcastData.testCaseNotes.length > 0 ? 
-  vectorcastData.testCaseNotes.map(note => formatNote(note)).join('\n\n----\n\n') : 
-  'No test case notes found.'}
-
-!3 CBA Notes
+%%tab-Justifications
+!3 Justifications
 
 ${vectorcastData.cbaNotes && vectorcastData.cbaNotes.length > 0 ? 
-  vectorcastData.cbaNotes.map(note => formatNote(note)).join('\n\n----\n\n') : 
-  'No CBA notes found.'}
+  vectorcastData.cbaNotes.map(note => formatNote(note)).join('\n----\n\n') : 
+  'No justifications found.'}
 %%
-
+${userCodeTab}
 %%`;
 
     const result = {
@@ -1618,18 +1435,39 @@ ${vectorcastData.cbaNotes && vectorcastData.cbaNotes.length > 0 ?
     return result;
 }
 
-function formatNote(note) {
-  if (!note || note.trim() === '') return '';
-  return "{{{\n" + note + "\n}}}\n\n";
+function formatNote(noteObj) {
+  if (!noteObj || !noteObj.note || noteObj.note.trim() === '') return '';
+  
+  let formattedNote = '';
+  
+  // Group functions by unit (C file) for smarter display
+  if (noteObj.unitSubprograms && noteObj.unitSubprograms.length > 0) {
+    // Group by unit
+    const groupedByUnit = {};
+    noteObj.unitSubprograms.forEach(item => {
+      if (!groupedByUnit[item.unit]) {
+        groupedByUnit[item.unit] = [];
+      }
+      groupedByUnit[item.unit].push(item.subprogram);
+    });
+    
+    // Format grouped information
+    Object.keys(groupedByUnit).forEach(unit => {
+      formattedNote += `!4 C File: ${unit}\n`;
+      groupedByUnit[unit].forEach(subprogram => {
+        formattedNote += `* Function: ${subprogram}\n`;
+      });
+      formattedNote += '\n';
+    });
+  }
+  
+  // Add the note content
+  formattedNote += "{{{\n" + noteObj.note + "\n}}}\n";
+  
+  return formattedNote;
 }
 
 function generateWiki(summary) {
-
-  let testCaseNotesHtml = '';
-  if (summary.testCaseNotes && summary.testCaseNotes.length > 0) {
-    testCaseNotesHtml = `<h4>Test Case Notes</h4>${summary.testCaseNotes.map(formatNote).join('')}`;
-  }
-  
   let cbaNotesHtml = '';
   if (summary.cbaNotes && summary.cbaNotes.length > 0) {
     cbaNotesHtml = `<h4>Covered By Analysis Notes</h4>${summary.cbaNotes.map(formatNote).join('')}`;
@@ -1637,32 +1475,71 @@ function generateWiki(summary) {
  
   return `{html}
   <div style="...">
-    // ... existing code ...
-    ${testCaseNotesHtml}
     ${cbaNotesHtml}
-    // ... existing code ...
   </div>
   {html}`;
 }
 
 function generateMultipleVectorCastCodeBeamerData(aggregatedData) {
-    console.log("Generating CodeBeamer data structure for multiple VectorCAST reports");
-    const reportSummary = `!3 Multiple VectorCAST Reports Summary
+console.log("Generating CodeBeamer data structure for multiple VectorCAST reports");
 
-| Total Reports | Total Files | Test Cases | Passed | Failed | Pass Rate
-| ${aggregatedData.reportCount} | ${aggregatedData.totalFiles} | ${aggregatedData.totalTestCases} | ${aggregatedData.passedTestCases} | ${aggregatedData.failedTestCases} | ${aggregatedData.passFailRate}%
+    function hasValidCoverage(coverage) {
+        if (!coverage || coverage === "알수없음") {
+            return false;
+        }
 
+        if (coverage.match(/^0\s*\/\s*0\s*\(\s*0%\s*\)$/) || coverage === "0%") {
+            return false;
+        }
+        
+        return true;
+    }
+
+    let coverageHeaders = [];
+    let coverageValues = [];
+    
+    if (hasValidCoverage(aggregatedData.statementCoverage)) {
+        coverageHeaders.push('Statement Coverage');
+        coverageValues.push(aggregatedData.statementCoverage);
+    }
+    
+    if (hasValidCoverage(aggregatedData.branchCoverage)) {
+        coverageHeaders.push('Branch Coverage');
+        coverageValues.push(aggregatedData.branchCoverage);
+    }
+    
+    if (hasValidCoverage(aggregatedData.functionCoverage)) {
+        coverageHeaders.push('Function Coverage');
+        coverageValues.push(aggregatedData.functionCoverage);
+    }
+    
+    if (hasValidCoverage(aggregatedData.functionCallCoverage)) {
+        coverageHeaders.push('Function Call Coverage');
+        coverageValues.push(aggregatedData.functionCallCoverage);
+    }
+    let coverageSummary = '';
+    if (coverageHeaders.length > 0) {
+        coverageSummary = `
 !3 Coverage Summary
 
-| Statement | Branch | Function | Function Call | MC/DC Pairs
-| ${aggregatedData.statementCoverage} | ${aggregatedData.branchCoverage} | ${aggregatedData.functionCoverage} | ${aggregatedData.functionCallCoverage} | ${aggregatedData.pairsCoverage}
+|| ${coverageHeaders.join(' || ')}
+| ${coverageValues.join(' | ')}
+`;
+    }   
+    const reportSummary = `%%tabbedSection
 
+!3 Multiple VectorCAST Reports Summary
+
+|| Total Report Files || Test Cases || Passed || Failed || Pass Rate
+| ${aggregatedData.reportCount} | ${aggregatedData.totalTestCases} | ${aggregatedData.passedTestCases} | ${aggregatedData.failedTestCases} | ${aggregatedData.passFailRate}%
+${coverageSummary}
 !3 Test Results Chart
 [{ PieChart title='Test Cases' threed='true'
 
 Successful, ${aggregatedData.passedTestCases}
 Failure, ${aggregatedData.failedTestCases}
-}]`;
+}]
+`;
 
     return {
         fieldValues: [{
