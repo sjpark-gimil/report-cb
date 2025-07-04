@@ -1207,6 +1207,24 @@ select.report-select option {
     max-width: 400px;
 }
 
+.attachment-info {
+    margin: 10px 0;
+    padding: 8px 12px;
+    background-color: #e8f4fd;
+    border: 1px solid #b8daff;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.attachment-info p {
+    margin: 0;
+    color: #004085;
+}
+
+.attachment-info strong {
+    color: #003366;
+}
+
 .action-file-drop-zone:hover {
     border-color: #00B5ED;
     background-color: #f8f9fa;

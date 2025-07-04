@@ -4,6 +4,7 @@ const session = require('express-session');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const FormData = require('form-data');
 
 const defaults = {
     cbApiUrl: 'http://codebeamer.mdsit.co.kr:3008',
@@ -850,6 +851,62 @@ function getErrorMessage(status) {
     return errorMessages[status] || `서버 오류가 발생했습니다 (${status})`;
 }
 
+async function uploadAttachmentToCodeBeamer(itemId, fileName, fileContent, auth) {
+    try {
+        console.log(`Starting attachment upload for item ${itemId}, file: ${fileName}`);
+        console.log(`File content length: ${fileContent.length} characters`);
+        
+        const formData = new FormData();
+        
+        // Create a buffer from the file content
+        const fileBuffer = Buffer.from(fileContent, 'utf8');
+        console.log(`File buffer size: ${fileBuffer.length} bytes`);
+        
+        // Append the file to form data - let FormData handle the content type
+        formData.append('attachments', fileBuffer, {
+            filename: fileName,
+            contentType: 'text/html'
+        });
+
+        const attachmentUrl = `${defaults.cbApiUrl}/api/v3/items/${itemId}/attachments`;
+        console.log(`Attachment upload URL: ${attachmentUrl}`);
+        
+        const response = await axios.post(attachmentUrl, formData, {
+            headers: {
+                'Authorization': `Basic ${auth}`,
+                'Accept': 'application/json',
+                ...formData.getHeaders()
+            },
+            validateStatus: status => status < 500
+        });
+
+        console.log(`Attachment upload response status: ${response.status}`);
+        console.log(`Attachment upload response data:`, response.data);
+
+        if (response.status >= 400) {
+            console.error(`Attachment upload failed with status ${response.status}:`, response.data);
+            throw new Error(`Attachment upload failed: ${getErrorMessage(response.status)}`);
+        }
+
+        console.log(`Attachment upload successful for item ${itemId}`);
+        return {
+            success: true,
+            attachmentId: response.data[0]?.id,
+            message: '첨부파일 업로드 성공'
+        };
+    } catch (error) {
+        console.error('Error uploading attachment:', error.message);
+        if (error.response) {
+            console.error('Error response status:', error.response.status);
+            console.error('Error response data:', error.response.data);
+        }
+        return {
+            success: false,
+            error: error.message || '첨부파일 업로드 실패'
+        };
+    }
+}
+
 app.post('/api/codebeamer/bulk-single-reports', requireAuth, async (req, res) => {
     if (!req.session || !req.session.auth) {
         return res.status(401).json({ error: '인가되지 않은 사용자입니다' });
@@ -866,19 +923,31 @@ app.post('/api/codebeamer/bulk-single-reports', requireAuth, async (req, res) =>
         
         for (let i = 0; i < reports.length; i++) {
             const report = reports[i];
-            const { itemId, reportContent } = report;
+            const { itemId, reportContent, fileName } = report;
+            
+            console.log(`Processing report ${i + 1}/${reports.length}:`);
+            console.log(`  - Item ID: ${itemId}`);
+            console.log(`  - File Name: ${fileName || 'NO FILE NAME PROVIDED'}`);
+            console.log(`  - Report Content Length: ${reportContent ? reportContent.length : 'NO CONTENT'}`);
             
             if (!itemId || !reportContent) {
                 results.push({
                     index: i,
                     itemId: itemId || 'N/A',
                     success: false,
-                    error: 'Item ID 또는 리포트 파일이 없습니다'
+                    error: 'Item ID 또는 리포트 파일이 없습니다',
+                    attachmentSuccess: false
                 });
                 continue;
             }
 
+            let fieldUpdateSuccess = false;
+            let attachmentSuccess = false;
+            let fieldError = '';
+            let attachmentError = '';
+
             try {
+                // 1. Update fields with report data
                 const vectorcastData = extractVectorCASTSummary(reportContent);
                 const data = generateVectorCastCodeBeamerData(vectorcastData);
                 
@@ -894,38 +963,83 @@ app.post('/api/codebeamer/bulk-single-reports', requireAuth, async (req, res) =>
                 });
 
                 if (response.status >= 400) {
-                    results.push({
-                        index: i,
-                        itemId: itemId,
-                        success: false,
-                        error: getErrorMessage(response.status),
-                        details: response.data
-                    });
+                    fieldError = getErrorMessage(response.status);
                 } else {
-                    results.push({
-                        index: i,
-                        itemId: itemId,
-                        success: true,
-                        message: '성공적으로 업데이트되었습니다'
-                    });
+                    fieldUpdateSuccess = true;
                 }
+
+                // 2. Upload attachment (if fileName is provided)
+                if (fileName && reportContent) {
+                    // Add delay to avoid rate limiting for multiple uploads
+                    if (i > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 1500));
+                    }
+                    
+                    const attachmentResult = await uploadAttachmentToCodeBeamer(
+                        itemId, 
+                        fileName, 
+                        reportContent, 
+                        req.session.auth
+                    );
+                    
+                    if (attachmentResult.success) {
+                        attachmentSuccess = true;
+                    } else {
+                        attachmentError = attachmentResult.error;
+                    }
+                }
+
+                // Determine overall success and message
+                let success = fieldUpdateSuccess;
+                let message = '';
+                let error = '';
+
+                if (fieldUpdateSuccess && attachmentSuccess) {
+                    message = '필드 업데이트 및 첨부파일 업로드 성공';
+                } else if (fieldUpdateSuccess && !fileName) {
+                    message = '필드 업데이트 성공';
+                } else if (fieldUpdateSuccess && !attachmentSuccess) {
+                    message = '필드 업데이트 성공, 첨부파일 업로드 실패';
+                    error = attachmentError;
+                } else {
+                    success = false;
+                    error = fieldError;
+                    if (attachmentError) {
+                        error += ` (첨부파일 오류: ${attachmentError})`;
+                    }
+                }
+
+                results.push({
+                    index: i,
+                    itemId: itemId,
+                    success: success,
+                    message: message,
+                    error: error,
+                    fieldUpdateSuccess: fieldUpdateSuccess,
+                    attachmentSuccess: attachmentSuccess
+                });
+
             } catch (error) {
                 results.push({
                     index: i,
                     itemId: itemId,
                     success: false,
-                    error: error.message
+                    error: error.message,
+                    fieldUpdateSuccess: false,
+                    attachmentSuccess: false
                 });
             }
         }
 
         const successCount = results.filter(r => r.success).length;
         const failureCount = results.length - successCount;
+        const attachmentSuccessCount = results.filter(r => r.attachmentSuccess).length;
 
         res.json({
             totalReports: reports.length,
             successCount,
             failureCount,
+            attachmentSuccessCount,
             results
         });
 

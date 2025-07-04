@@ -31,6 +31,9 @@
                         <span>단일 리포트 결과 일괄 처리</span>
                         <button class="add-action-btn" onclick="addVectorcastAction()">+ 필드 추가</button>
                     </div>
+                    <div class="attachment-info">
+                        <p><strong>📎 첨부파일 기능:</strong> 선택된 HTML 리포트 파일이 자동으로 CodeBeamer의 첨부파일로 업로드됩니다.</p>
+                    </div>
                     <div id="vectorcastActions">
                         <div class="vectorcast-action" data-index="0">
                             <div class="action-inputs">
@@ -1269,6 +1272,12 @@
         try {
             showStatus(statusElement, `${reports.length}개 전송 중...`, true);
 
+            console.log('Reports being sent:', reports.map(r => ({
+                itemId: r.itemId,
+                fileName: r.fileName,
+                contentLength: r.reportContent ? r.reportContent.length : 0
+            })));
+
             const response = await fetch('/api/codebeamer/bulk-single-reports', {
                 method: 'POST',
                 headers: {
@@ -1285,16 +1294,33 @@
                 throw new Error(result.error || '업로드 실패');
             }
 
-            showStatus(statusElement, `완료: ${result.successCount}개 성공, ${result.failureCount}개 실패`, result.failureCount === 0);
+            const attachmentInfo = result.attachmentSuccessCount > 0 ? `, 첨부파일 ${result.attachmentSuccessCount}개` : '';
+            showStatus(statusElement, `완료: ${result.successCount}개 성공, ${result.failureCount}개 실패${attachmentInfo}`, result.failureCount === 0);
 
             const username = '<%= username %>';
             
             if (result.results && result.results.length > 0) {
-                resultsList.innerHTML = result.results.map(r => `
-                    <div class="result-item ${r.success ? 'success' : 'error'}">
-                        <strong>Item ${r.itemId}</strong>: ${r.success ? r.message : r.error}
-                    </div>
-                `).join('');
+                resultsList.innerHTML = result.results.map(r => {
+                    let statusIcon = '';
+                    let attachmentStatus = '';
+                    
+                    if (r.fieldUpdateSuccess && r.attachmentSuccess) {
+                        statusIcon = '✅📎';
+                    } else if (r.fieldUpdateSuccess && !r.attachmentSuccess) {
+                        statusIcon = '✅❌';
+                        attachmentStatus = ' (첨부파일 실패)';
+                    } else if (r.fieldUpdateSuccess) {
+                        statusIcon = '✅';
+                    } else {
+                        statusIcon = '❌';
+                    }
+                    
+                    return `
+                        <div class="result-item ${r.success ? 'success' : 'error'}">
+                            <strong>${statusIcon} Item ${r.itemId}</strong>: ${r.success ? r.message : r.error}${attachmentStatus}
+                        </div>
+                    `;
+                }).join('');
                 resultsDiv.style.display = 'block';
             }
 

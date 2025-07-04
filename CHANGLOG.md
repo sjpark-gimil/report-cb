@@ -36,3 +36,7 @@ Improvements
 - VectorCAST외 기존 검증 툴 제거
 - User Code파싱 데이터 추가
 - 단일 리포트 전송 일괄 처리
+
+# 1.1.1 (2025-06-30)
+New Feature
+- html 리포트 첨부 기능 추가
