@@ -29,10 +29,10 @@
                 <div class="multiple-actions-container">
                     <div class="multiple-actions-header">
                         <span>단일 리포트 결과 일괄 처리</span>
-                        <button class="add-action-btn" onclick="addVectorcastAction()">+ 필드 추가</button>
+                        <button class="add-action-btn" onclick="addVectorcastAction()">+ 일괄 처리 섹션 추가</button>
                     </div>
                     <div class="attachment-info">
-                        <p><strong>📎 첨부파일 기능:</strong> 선택된 HTML 리포트 파일이 자동으로 CodeBeamer의 첨부파일로 업로드됩니다.</p>
+                        <p><strong>📎 리포트 자동 첨부 :</strong> 선택한 HTML 리포트 파일을 자동으로 CodeBeamer의 첨부파일로 업로드합니다.</p>
                     </div>
                     <div id="vectorcastActions">
                         <div class="vectorcast-action" data-index="0">
@@ -61,7 +61,7 @@
                     </div>
                     <div class="multiple-actions-controls">
                         <button class="inline-button" onclick="processMultipleVectorcastActions()">
-                            <span>결과 전송</span>
+                            <span>결과 전송 및 리포트 첨부</span>
                         </button>
                     </div>
                 </div>
@@ -82,6 +82,7 @@
         <div class="pipeline-container">
             <h2>VectorCAST (Multiple Reports)</h2>
             <div class="pipeline-form">
+                <div class="multiple-actions-container">
                 <div class="input-container">
                     <div class="selector-container">
                         <select id="multipleProjectSelector" onchange="loadMultipleTrackers()">
@@ -93,11 +94,13 @@
                         <select id="multipleItemSelector" disabled>
                             <option value="">아이템 선택</option>
                         </select>
+                        <div class="report-link">
+                            <a href="#" id="multipleVectorcastReportLink" onclick="viewCodebeamerItem('vectorcastMultiple')">코드비머 보기</a>
+                        </div>
                     </div>
-                    <button class="inline-button" onclick="updateMultipleReports()" alt="Run">
-                        <span>결과 전송</span>
-                    </button>
                 </div>
+                
+                
                 <div class="multiple-file-drop-zone" id="multipleVectorcastDropZone">
                     <p>리포트 파일을 여기에 끌어다 놓으세요 (단일/다중 파일 또는 폴더)</p>
                     <div class="warning-text">
@@ -134,18 +137,29 @@
                         </div>
                     </div>
                 </div>
-            </div>
+            
             <div id="multipleVectorcastStatus" class="status"></div>
             <div id="multipleVectorcastProgress" class="progress-bar" style="display: none;">
                 <div class="progress-fill"></div>
                 <span class="progress-text">0%</span>
             </div>
-            <div class="report-link">
-                <a href="#" id="multipleVectorcastReportLink" onclick="viewCodebeamerItem('vectorcastMultiple')">코드비머 보기</a>
+
+            <div class="multiple-actions-controls">
+                <button class="inline-button" onclick="updateMultipleReports()" alt="Run">
+                    <span>결과 전송</span>
+                </button>
+            </div>
+
+            <div id="multipleVectorcastResults" class="status-message">
+                <h4>전송 결과</h4>
+                <div id="multipleVectorcastResultsList"></div>
             </div>
         </div>
+        </div>
+        
 
 
+        
 
     </div>
 

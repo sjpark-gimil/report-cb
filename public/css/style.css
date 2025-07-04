@@ -333,6 +333,7 @@ strong {
 }
 
 .pipeline-container h2 {
+    margin-top: 0;
     font-size: 24px;
     font-weight: bold;
     margin-bottom: 10px;
@@ -433,7 +434,7 @@ strong {
     font-size: 14px;
 }
 
-.input-container .inline-button {
+.input-container .inline-button, .inline-button {
     padding: 10px 15px;
     font-size: 14px;
     border-radius: 4px;
@@ -446,11 +447,11 @@ strong {
     flex-shrink: 0;
 }
 
-.input-container .inline-button:hover {
+.input-container .inline-button:hover, .inline-button:hover {
     background-color: #00B5ED;
 }
 
-.report-link {
+.report-link, .input-container .report-link {
     display: flex;
     justify-content: center;
     gap: 10px;
@@ -459,10 +460,15 @@ strong {
     width: 100%;
 }
 
-.report-link a {
+.selector-container .report-link {
+    margin-top: 0;
+    width: auto;
+    flex-shrink: 0;
+}
+
+.report-link a, .input-container .report-link a {
     min-width: 140px;
     text-align: center;
-    margin-top: 15px;
     padding: 10px 15px;
     border-radius: 4px;
     box-sizing: border-box;
@@ -473,19 +479,19 @@ strong {
     transition: all 0.2s ease;
 }
 
-.report-link a:first-child {
+.report-link a:first-child, .input-container .report-link a:first-child {
     background-color: #333;
     color: #00B5ED;
     border: none;
 }
 
-.report-link a:last-child {
+.report-link a:last-child, .input-container .report-link a:last-child {
     background-color: #333;
     color: #00B5ED;
     border: none;
 }
 
-.report-link a:first-child:hover, .report-link a:last-child:hover {
+.report-link a:first-child:hover, .report-link a:last-child:hover, .input-container .report-link a:first-child:hover, .input-container .report-link a:last-child:hover {
     background-color: #d6eeff;
 }
 
@@ -599,7 +605,6 @@ strong {
 }
 
 .status-message {
-    margin-top: 20px;
     padding: 10px 15px;
     border-radius: 4px;
     display: none;
@@ -702,17 +707,15 @@ select.report-select option {
 .multiple-file-drop-zone {
     border: 2px dashed #ccc;
     border-radius: 4px;
-    padding: 20px;
+    padding: 20px 0;
     text-align: center;
-    margin-top: 10px;
-    margin-bottom: 10px;
+    margin: 15px 0 25px 0;
     cursor: pointer;
     transition: background-color 0.3s, border-color 0.3s;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    width: 94%;
 }
 
 .multiple-file-drop-zone:hover, .multiple-file-drop-zone.drag-over {
@@ -726,13 +729,12 @@ select.report-select option {
 }
 
 .multiple-dropped-files-container {
-    margin-top: 10px;
-    margin-bottom: 10px;
+    margin-top: 20px;
+    margin-bottom: 20px;
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     max-height: 200px;
     overflow-y: auto;
-    width: 100%;
 }
 
 .multiple-files-header {
@@ -882,7 +884,6 @@ select.report-select option {
     border: 1px solid #e0e0e0;
     border-radius: 4px;
     background-color: #f8f9fa;
-    width: 97%;
 }
 
 .multiple-reports-summary h4 {
@@ -955,15 +956,6 @@ select.report-select option {
     color: #d63384;
 }
 
-/* Multiple Actions Styles */
-.multiple-actions-container {
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    padding: 15px;
-    background-color: #f8f9fa;
-    width: 97%;
-}
-
 .multiple-actions-header {
     display: flex;
     justify-content: space-between;
@@ -974,9 +966,9 @@ select.report-select option {
 }
 
 .multiple-actions-header span {
-    font-weight: 500;
+    font-weight: 600;
     color: #333;
-    font-size: 14px;
+    font-size: 16px;
 }
 
 .add-action-btn {
@@ -995,13 +987,6 @@ select.report-select option {
     background-color: #d6eeff;
 }
 
-.vectorcast-action {
-    margin-bottom: 10px;
-    padding: 12px;
-    background-color: white;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-}
 
 .action-inputs {
     display: flex;
@@ -1026,11 +1011,13 @@ select.report-select option {
     align-items: center;
     flex: 1;
     min-width: 0;
+    justify-content: center;
+    margin: 10px 0;
 }
 
 /* Single report selectors - wider */
 .selector-container select {
-    padding: 8px 12px;
+    padding: 10px 15px;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
@@ -1048,8 +1035,8 @@ select.report-select option {
 #multipleProjectSelector,
 #multipleTrackerSelector,
 #multipleItemSelector {
-    min-width: 150px !important;
-    max-width: 250px !important;
+    min-width: 200px !important;
+    max-width: 300px !important;
 }
 
 .selector-container select:disabled {
@@ -1145,7 +1132,7 @@ select.report-select option {
 
 .multiple-actions-controls {
     margin-top: 15px;
-    padding-top: 15px;
+    padding-top: 35px;
     border-top: 1px solid #e0e0e0;
     text-align: center;
 }
@@ -1211,7 +1198,7 @@ select.report-select option {
     margin: 10px 0;
     padding: 8px 12px;
     background-color: #e8f4fd;
-    border: 1px solid #b8daff;
+    border-left: 4px solid #00B5ED;
     border-radius: 4px;
     font-size: 14px;
 }
