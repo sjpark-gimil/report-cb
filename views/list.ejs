@@ -459,10 +459,10 @@
          try {
              showStatus(statusElement, 'CodeBeamer 연결 중...', true);
              
-             // Use auto-login redirect page approach
+             // Use auto-login redirect page approach that was working
              const currentHost = window.location.origin;
              const autoLoginUrl = `${currentHost}/codebeamer-access?item=${itemId}`;
-             showStatus(statusElement, 'CodeBeamer 자동 로그인 중... (vectorCAST 권한으로)', true);
+             showStatus(statusElement, `CodeBeamer 아이템 ${itemId} 자동 로그인 중... (vectorCAST 권한으로)`, true);
              window.open(autoLoginUrl, '_blank');
              
          } catch (error) {
@@ -1161,10 +1161,10 @@
          try {
              showStatus(statusElement, 'CodeBeamer 연결 중...', true);
              
-             // Use auto-login redirect page approach
+             // Use auto-login redirect page approach that was working  
              const currentHost = window.location.origin;
              const autoLoginUrl = `${currentHost}/codebeamer-access?item=${itemId}`;
-             showStatus(statusElement, 'CodeBeamer 자동 로그인 중... (vectorCAST 권한으로)', true);
+             showStatus(statusElement, `CodeBeamer 아이템 ${itemId} 자동 로그인 중... (vectorCAST 권한으로)`, true);
              window.open(autoLoginUrl, '_blank');
              
          } catch (error) {
