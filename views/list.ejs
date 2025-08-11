@@ -20,6 +20,21 @@
         </div>                  
     </header>
 
+    <div class="sample-file-section">
+        <div class="sample-file-header">
+            <h4>📋 데모용 샘플 파일</h4>
+            <p>데모용 VectorCAST 결과 샘플 파일을 자동으로 업로드합니다</p>
+        </div>
+        <div class="sample-file-actions">
+            <button class="sample-file-btn primary" onclick="loadDemoSingleSample()">
+                📄 Single Report 샘플 파일 사용하기
+            </button>
+            <button class="sample-file-btn secondary" onclick="loadDemoMultipleSamples()">
+                📁 Multiple Reports 샘플 파일 사용하기
+            </button>
+        </div>
+    </div>
+
     <div class="pipeline-containers">
    
         <!--Single VectorCAST Report Card -->
@@ -52,6 +67,7 @@
                                     <button class="file-select-btn" onclick="selectFileForAction(0)">파일 선택</button>
                                     <input type="file" class="action-file-input" accept=".html" style="display: none;" onchange="handleActionFileChange(0)">
                                     <span class="action-file-name">파일이 없습니다</span>
+                                    <button class="clear-file-btn" onclick="clearActionFile(0)" style="display: none;" title="파일 제거">🗑️</button>
                                 </div>
                                 <button class="action-view-codebeamer" onclick="viewActionCodebeamer(0)">코드비머 보기</button>
                                 <button class="action-view-report" onclick="viewActionReport(0)">리포트 보기</button>
@@ -415,34 +431,49 @@
         window.location.href = '/logout';
     }
 
-    function viewCodebeamerItem(type) {
-        let itemId;
-        let statusElement;
-        
-        if (type === 'vectorcastMultiple') {
-            const itemSelector = document.getElementById('multipleItemSelector');
-            itemId = itemSelector.value;
-            statusElement = document.getElementById('multipleVectorcastStatus');
-        } else {
-            const itemElement = document.getElementById(`${type}ItemId`);
-            itemId = itemElement ? itemElement.value : '';
-            statusElement = document.getElementById(`${type}Status`);
-        }
-        
-        if (!itemId) {
-            showStatus(statusElement, '아이템을 선택하세요', false);
-            return;
-        }
+         async function viewCodebeamerItem(type) {
+         let itemId;
+         let statusElement;
+         
+         if (type === 'vectorcastMultiple') {
+             const itemSelector = document.getElementById('multipleItemSelector');
+             itemId = itemSelector.value;
+             statusElement = document.getElementById('multipleVectorcastStatus');
+         } else {
+             const itemElement = document.getElementById(`${type}ItemId`);
+             itemId = itemElement ? itemElement.value : '';
+             statusElement = document.getElementById(`${type}Status`);
+         }
+         
+         if (!itemId) {
+             showStatus(statusElement, '아이템을 선택하세요', false);
+             return;
+         }
 
-        const serverUrl = '<%= serverUrl %>';
-        if (!serverUrl) {
-            showStatus(statusElement, 'Codebeamer 서버 URL이 설정되지 않았습니다', false);
-            return;
-        }
+         const serverUrl = '<%= serverUrl %>';
+         if (!serverUrl) {
+             showStatus(statusElement, 'Codebeamer 서버 URL이 설정되지 않았습니다', false);
+             return;
+         }
 
-        const itemUrl = `${serverUrl}/item/${itemId}`;
-        window.open(itemUrl, '_blank');
-    }
+         try {
+             showStatus(statusElement, 'CodeBeamer 연결 중...', true);
+             
+             // Use auto-login redirect page approach
+             const currentHost = window.location.origin;
+             const autoLoginUrl = `${currentHost}/codebeamer-access?item=${itemId}`;
+             showStatus(statusElement, 'CodeBeamer 자동 로그인 중... (vectorCAST 권한으로)', true);
+             window.open(autoLoginUrl, '_blank');
+             
+         } catch (error) {
+             console.error('CodeBeamer access error:', error);
+             showStatus(statusElement, 'CodeBeamer 연결 실패, 기본 방식으로 연결 중...', false);
+             
+             // Fallback to normal URL if everything fails
+             const itemUrl = `${serverUrl}/item/${itemId}`;
+             window.open(itemUrl, '_blank');
+         }
+     }
 
     function initDragAndDrop(type) {
         const dropZone = document.getElementById(`${type}DropZone`);
@@ -943,6 +974,11 @@
                     return response.json().then(data => {
                         updateMultipleReportSummary(data);
                         summaryElement.style.display = 'block';
+                        
+                        // Auto-hide summary after 10 seconds
+                        setTimeout(() => {
+                            summaryElement.style.display = 'none';
+                        }, 10000);
 
                         console.log(`Sending ${validReports.length} reports to CodeBeamer API`);
                         return fetch(`/api/codebeamer/items/${itemId}/fields?type=vectorcast-multiple`, {
@@ -1090,6 +1126,7 @@
                     <button class="file-select-btn" onclick="selectFileForAction(${actionCounter})">파일 선택</button>
                     <input type="file" class="action-file-input" accept=".html" style="display: none;" onchange="handleActionFileChange(${actionCounter})">
                     <span class="action-file-name">파일이 없습니다</span>
+                    <button class="clear-file-btn" onclick="clearActionFile(${actionCounter})" style="display: none;" title="파일 제거">🗑️</button>
                 </div>
                 <button class="action-view-codebeamer" onclick="viewActionCodebeamer(${actionCounter})">코드비머 보기</button>
                 <button class="action-view-report" onclick="viewActionReport(${actionCounter})">리포트 보기</button>
@@ -1104,26 +1141,41 @@
         actionCounter++;
     }
 
-    function viewActionCodebeamer(index) {
-        const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
-        const itemSelector = action.querySelector('.action-item-selector');
-        const itemId = itemSelector.value.trim();
-        const statusElement = document.getElementById('vectorcastStatus');
-        
-        if (!itemId) {
-            showStatus(statusElement, '아이템을 선택하세요', false);
-            return;
-        }
+         async function viewActionCodebeamer(index) {
+         const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
+         const itemSelector = action.querySelector('.action-item-selector');
+         const itemId = itemSelector.value.trim();
+         const statusElement = document.getElementById('vectorcastStatus');
+         
+         if (!itemId) {
+             showStatus(statusElement, '아이템을 선택하세요', false);
+             return;
+         }
 
-        const serverUrl = '<%= serverUrl %>';
-        if (!serverUrl) {
-            showStatus(statusElement, 'Codebeamer 서버 URL이 설정되지 않았습니다', false);
-            return;
-        }
+         const serverUrl = '<%= serverUrl %>';
+         if (!serverUrl) {
+             showStatus(statusElement, 'Codebeamer 서버 URL이 설정되지 않았습니다', false);
+             return;
+         }
 
-        const itemUrl = `${serverUrl}/item/${itemId}`;
-        window.open(itemUrl, '_blank');
-    }
+         try {
+             showStatus(statusElement, 'CodeBeamer 연결 중...', true);
+             
+             // Use auto-login redirect page approach
+             const currentHost = window.location.origin;
+             const autoLoginUrl = `${currentHost}/codebeamer-access?item=${itemId}`;
+             showStatus(statusElement, 'CodeBeamer 자동 로그인 중... (vectorCAST 권한으로)', true);
+             window.open(autoLoginUrl, '_blank');
+             
+         } catch (error) {
+             console.error('CodeBeamer access error:', error);
+             showStatus(statusElement, 'CodeBeamer 연결 실패, 기본 방식으로 연결 중...', false);
+             
+             // Fallback to normal URL if everything fails
+             const itemUrl = `${serverUrl}/item/${itemId}`;
+             window.open(itemUrl, '_blank');
+         }
+     }
 
     function viewActionReport(index) {
         const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
@@ -1191,12 +1243,14 @@
         const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
         const fileInput = action.querySelector('.action-file-input');
         const fileName = action.querySelector('.action-file-name');
+        const clearBtn = action.querySelector('.clear-file-btn');
         
         if (fileInput.files.length > 0) {
             const file = fileInput.files[0];
             fileName.textContent = file.name;
             fileName.title = file.name; 
             fileName.classList.add('has-file');
+            clearBtn.style.display = 'inline-block';
 
             const reader = new FileReader();
             reader.onload = (event) => {
@@ -1212,8 +1266,32 @@
             fileName.textContent = '파일이 없습니다';
             fileName.title = ''; 
             fileName.classList.remove('has-file');
+            clearBtn.style.display = 'none';
             sessionStorage.removeItem(`vectorcastAction_${index}`);
         }
+    }
+
+    function clearActionFile(index) {
+        const action = document.querySelector(`.vectorcast-action[data-index="${index}"]`);
+        const fileInput = action.querySelector('.action-file-input');
+        const fileName = action.querySelector('.action-file-name');
+        const clearBtn = action.querySelector('.clear-file-btn');
+        
+        // Clear the file input
+        fileInput.value = '';
+        
+        // Reset the display
+        fileName.textContent = '파일이 없습니다';
+        fileName.title = '';
+        fileName.classList.remove('has-file');
+        clearBtn.style.display = 'none';
+        
+        // Remove from session storage
+        sessionStorage.removeItem(`vectorcastAction_${index}`);
+        
+        // Show success message
+        const statusElement = document.getElementById('vectorcastStatus');
+        showStatus(statusElement, '파일이 제거되었습니다', true);
     }
 
     async function processMultipleVectorcastActions() {
@@ -1336,6 +1414,11 @@
                     `;
                 }).join('');
                 resultsDiv.style.display = 'block';
+                
+                // Auto-hide results after 5 seconds
+                setTimeout(() => {
+                    resultsDiv.style.display = 'none';
+                }, 5000);
             }
 
             progressFill.style.width = '100%';
@@ -1446,15 +1529,20 @@
         });
     }
 
+    let cachedProjects = null;
+
     document.addEventListener('DOMContentLoaded', () => {
         updateRemoveButtonVisibility();
         initAllActionDragAndDrop();
         restoreSavedFiles();
-        loadProjectsForAction(0);
-        loadProjectsForMultiple();
+        loadAllProjects();
     });
 
-    async function loadProjectsForAction(index) {
+    async function fetchProjects() {
+        if (cachedProjects) {
+            return cachedProjects;
+        }
+
         try {
             const response = await fetch('/api/codebeamer/projects', {
                 method: 'GET',
@@ -1465,48 +1553,49 @@
                 throw new Error('Failed to fetch projects');
             }
             
-            const projects = await response.json();
-            const projectSelector = document.querySelector(`.action-project-selector[data-index="${index}"]`);
-            
-            if (projectSelector) {
-                projectSelector.innerHTML = '<option value="">프로젝트 선택</option>';
-                projects.forEach(project => {
-                    const option = document.createElement('option');
-                    option.value = project.id;
-                    option.textContent = project.name;
-                    projectSelector.appendChild(option);
-                });
-            }
+            cachedProjects = await response.json();
+            return cachedProjects;
+        } catch (error) {
+            console.error('Error loading projects:', error);
+            throw error;
+        }
+    }
+
+    async function loadAllProjects() {
+        try {
+            const projects = await fetchProjects();
+            loadProjectsForAction(0, projects);
+            loadProjectsForMultiple(projects);
         } catch (error) {
             console.error('Error loading projects:', error);
         }
     }
 
-    async function loadProjectsForMultiple() {
-        try {
-            const response = await fetch('/api/codebeamer/projects', {
-                method: 'GET',
-                credentials: 'include'
+    function loadProjectsForAction(index, projects) {
+        const projectSelector = document.querySelector(`.action-project-selector[data-index="${index}"]`);
+        
+        if (projectSelector) {
+            projectSelector.innerHTML = '<option value="">프로젝트 선택</option>';
+            projects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.id;
+                option.textContent = project.name;
+                projectSelector.appendChild(option);
             });
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch projects');
-            }
-            
-            const projects = await response.json();
-            const projectSelector = document.getElementById('multipleProjectSelector');
-            
-            if (projectSelector) {
-                projectSelector.innerHTML = '<option value="">프로젝트 선택</option>';
-                projects.forEach(project => {
-                    const option = document.createElement('option');
-                    option.value = project.id;
-                    option.textContent = project.name;
-                    projectSelector.appendChild(option);
-                });
-            }
-        } catch (error) {
-            console.error('Error loading projects:', error);
+        }
+    }
+
+    function loadProjectsForMultiple(projects) {
+        const projectSelector = document.getElementById('multipleProjectSelector');
+        
+        if (projectSelector) {
+            projectSelector.innerHTML = '<option value="">프로젝트 선택</option>';
+            projects.forEach(project => {
+                const option = document.createElement('option');
+                option.value = project.id;
+                option.textContent = project.name;
+                projectSelector.appendChild(option);
+            });
         }
     }
 
@@ -1725,6 +1814,77 @@
             console.log('Items loaded successfully, selector enabled');
         } catch (error) {
             console.error('Error loading items:', error);
+        }
+    }
+
+    // Demo functions (temporary)
+    async function loadDemoSingleSample() {
+        try {
+            const response = await fetch('/api/demo/single-sample', {
+                method: 'GET',
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('데모 샘플 파일을 가져올 수 없습니다');
+            }
+            
+            const data = await response.json();
+            
+            // Create a virtual file object from the content
+            const blob = new Blob([data.content], { type: 'text/html' });
+            const file = new File([blob], data.filename, { type: 'text/html' });
+            
+            // Simulate file drop for single report section
+            // Find the first action's file input and simulate upload
+            const firstAction = document.querySelector('.vectorcast-action[data-index="0"]');
+            if (firstAction) {
+                const fileInput = firstAction.querySelector('.action-file-input');
+                const fileName = firstAction.querySelector('.action-file-name');
+                
+                // Create a DataTransfer object to simulate file selection
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                fileInput.files = dataTransfer.files;
+                
+                // Trigger the file change handler
+                handleActionFileChange(0);
+            }
+            
+        } catch (error) {
+            const statusElement = document.getElementById('vectorcastStatus');
+            showStatus(statusElement, `데모 로드 실패: ${error.message}`, false);
+            console.error('Error loading demo single sample:', error);
+        }
+    }
+
+    async function loadDemoMultipleSamples() {
+        try {
+            const response = await fetch('/api/demo/multiple-samples', {
+                method: 'GET',
+                credentials: 'include'
+            });
+            
+            if (!response.ok) {
+                throw new Error('데모 샘플 파일들을 가져올 수 없습니다');
+            }
+            
+            const data = await response.json();
+            const samples = data.samples;
+            
+            // Create virtual file objects from the content
+            const files = samples.map(sample => {
+                const blob = new Blob([sample.content], { type: 'text/html' });
+                return new File([blob], sample.filename, { type: 'text/html' });
+            });
+            
+            // Simulate multiple file drop
+            handleMultipleFiles(files);
+            
+        } catch (error) {
+            const statusElement = document.getElementById('multipleVectorcastStatus');
+            showStatus(statusElement, `데모 로드 실패: ${error.message}`, false);
+            console.error('Error loading demo multiple samples:', error);
         }
     }
 

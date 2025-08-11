@@ -5,11 +5,23 @@ const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
 const FormData = require('form-data');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
+const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const defaults = {
     cbApiUrl: 'http://codebeamer.mdsit.co.kr:3008',
     cbWebUrl: 'http://codebeamer.mdsit.co.kr:3008',
     sessionSecret: 'default-secret',
+};
+
+// JWT Configuration for CodeBeamer Authentication
+const CB_JWT_SECRET = "CB-ENCRYPTED-D4-6E-6C-91-E4-56-4E-40-77-E2-9A-7A-E5-B7-5E-92-73-44-29-56-74-4C-B9-ED-86-A8-8-76-2-68-6E-A5-44-8E-1F-AD-DD-85-EF-E7-8E-B1-F9-8D-C1-46-D3-46-A6-7D-E4-B5-C8-2-4A-B9-18-BB-BA-2-92-AA-AE-3F-4E-DD-29-18-4B-11-85-C9-E7-0-69-58-B-A7-91-F4-CB-F3-10-43-9E-D9-E-B9-D0-0-1C-1F-9A-EF-C7-EB-0-6F-2E-37-3D-A1-7A-56-DB-6E-CB-3B-6D-C6-1C-3E-F1-A8-F8-BD-4A-BE-79-8-EE-A4-9E-7B-D1-97-8-D6-6F-F8-9F-55-29-56-5C-7D-F6-86-71-9A-6E-7D-2E-DC-DC-55-98-C4-6B-CF-25-5E-48-7E-32-71-61-D0-3F-85-6F-82-95-8E-A6-39-13-A7-B-4B-2F-A-EC-1F-B4-50-11-32-74-5C-59-30-B6-7-6A-B5-C2-9-A8-55-39-AE-63-A3-FF-F-C0-F0-A1-84-BF-20-FB-1B-35-72-D7-E8-3F-BB-56-57-C1-97-EA-EE-7A-85-F5-2E-1E-AC-1-25-49-F4-23-DB-25-3C-CC-0-87-62-7F-64-49-53-F0-90-26-CB-F7-45-1E-77-47-E0-F3-CC-39-C0-A2-74-4C-AA-1D-C6-8D-15-AF-AE-B4-29";
+const CB_TOKEN_VALID_MINUTES = 262800; // 6 months
+const CB_TOKEN_RENEW_TIMEFRAME = 30; // 30 minutes
+const userCredentials = { 
+    'vectorCAST': { username: 'vectorCAST', password: '1234', role: 'user' },
+    'mds': { username: 'mds', password: '1234', role: 'user' }
 };
 
 function normalizePath(filePath) {
@@ -24,6 +36,63 @@ function normalizePath(filePath) {
 
 let reportPaths = { vectorcast: '' };
 
+// JWT Functions for CodeBeamer Authentication  
+const generateCodebeamerJWT = (username = 'vectorCAST') => {
+    const now = Math.floor(Date.now() / 1000);
+    const expiresAt = now + (CB_TOKEN_VALID_MINUTES * 60);
+    
+    const payload = {
+        iss: 'codeBeamer',
+        name: username,
+        exp: expiresAt,
+        type: 'access',
+        iat: now
+    };
+    
+    const token = jwt.sign(payload, CB_JWT_SECRET, { algorithm: 'HS256' });
+    return token;
+};
+
+const isJWTValid = (token) => {
+    try {
+        const decoded = jwt.verify(token, CB_JWT_SECRET);
+        return decoded.exp > Math.floor(Date.now() / 1000);
+    } catch (error) {
+        return false;
+    }
+};
+
+const performCodebeamerLogin = async (username = 'sejin.park') => {
+    try {
+        const userCreds = userCredentials[username];
+        if (!userCreds) {
+            return { success: false, error: 'User not found' };
+        }
+
+        const loginPageResponse = await axios.get('http://codebeamer.mdsit.co.kr:3008/login.spr');
+        const csrfMatch = loginPageResponse.data.match(/name="_csrf" value="([^"]+)"/);
+        const csrfToken = csrfMatch ? csrfMatch[1] : '';
+        const loginResponse = await axios.post('http://codebeamer.mdsit.co.kr:3008/login.spr', 
+            `user=${userCreds.username}&password=${userCreds.password}&_csrf=${csrfToken}`,
+            {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                },
+                maxRedirects: 0,
+                validateStatus: (status) => status < 400
+            }
+        );
+
+        const cookies = loginResponse.headers['set-cookie'];
+        return { success: true, cookies, csrfToken, username: userCreds.username };
+        
+    } catch (error) {
+        console.error('Codebeamer login error:', error.message);
+        return { success: false, error: error.message };
+    }
+};
+
 const app = express();
 const PORT = 3007;
 const HOST = '0.0.0.0';
@@ -33,6 +102,12 @@ const corsOptions = {
     allowedHeaders: ['Content-Type', 'Authorization', 'accept'],
     credentials: true
 };
+
+// Hardcoded credentials for temporary auto-login
+const HARDCODED_USERNAME = 'vectorCAST';
+const HARDCODED_PASSWORD = '1234';
+const BYPASS_LOGIN = true; // Set to false to re-enable normal login
+
 
 app.set("view engine", "ejs");
 app.set("views", path.join(__dirname, "views"));
@@ -458,20 +533,32 @@ function extractVectorCASTSummary(html) {
     };
 }
 
-
-
-const requireAuth = (req, res, next) => {
-    if (!req.session || !req.session.auth) {
-        return res.redirect('/login');
+function requireAuth(req, res, next) {
+    if (req.session && req.session.auth) {
+        next();
+    } else if (BYPASS_LOGIN) {
+        // Auto-authenticate with hardcoded credentials
+        const auth = Buffer.from(`${HARDCODED_USERNAME}:${HARDCODED_PASSWORD}`).toString('base64');
+        req.session.auth = auth;
+        req.session.username = HARDCODED_USERNAME;
+        next();
+    } else {
+        res.redirect('/login');
     }
-    next();
-};
+}
 
 app.get('/login', (req, res) => {
-    res.render('login', { 
-        error: null,
-        serverUrl: defaults.cbApiUrl
-    });
+    if (BYPASS_LOGIN) {
+        // Auto-redirect to main page if bypass is enabled
+        const auth = Buffer.from(`${HARDCODED_USERNAME}:${HARDCODED_PASSWORD}`).toString('base64');
+        req.session.auth = auth;
+        req.session.username = HARDCODED_USERNAME;
+        req.session.save(() => {
+            res.redirect('/');
+        });
+    } else {
+        res.render('login', { error: null });
+    }
 });
 
 app.post('/login', (req, res) => {
@@ -508,10 +595,55 @@ app.get('/logout', (req, res) => {
 app.get('/', requireAuth, (req, res) => {
     res.render('list', {
         currentPath: '/',
-        username: req.session.username || '',
+        username: req.session.username || HARDCODED_USERNAME,
         vectorcastPath: reportPaths.vectorcast || '',
         serverUrl: defaults.cbApiUrl
     });
+});
+
+
+// Demo sample file endpoints (temporary)
+app.get('/api/demo/single-sample', requireAuth, (req, res) => {
+    try {
+        const sampleFilePath = path.join(__dirname, 'uploads', 'aaa.html');
+        
+        if (!fs.existsSync(sampleFilePath)) {
+            return res.status(404).json({ error: 'Sample file not found' });
+        }
+        
+        const fileContent = fs.readFileSync(sampleFilePath, 'utf8');
+        
+        res.json({
+            filename: 'aaa.html',
+            content: fileContent
+        });
+    } catch (error) {
+        console.error('Error serving single demo sample:', error);
+        res.status(500).json({ error: 'Failed to serve demo sample' });
+    }
+});
+
+app.get('/api/demo/multiple-samples', requireAuth, (req, res) => {
+    try {
+        const samples = [];
+        const files = ['aaa.html', 'bbb.html'];
+        
+        files.forEach(filename => {
+            const sampleFilePath = path.join(__dirname, 'uploads', filename);
+            if (fs.existsSync(sampleFilePath)) {
+                const fileContent = fs.readFileSync(sampleFilePath, 'utf8');
+                samples.push({
+                    filename: filename,
+                    content: fileContent
+                });
+            }
+        });
+        
+        res.json({ samples });
+    } catch (error) {
+        console.error('Error serving multiple demo samples:', error);
+        res.status(500).json({ error: 'Failed to serve demo samples' });
+    }
 });
 
 app.post('/settings', (req, res) => {
@@ -1359,6 +1491,311 @@ app.get('/api/codebeamer/trackers/:trackerId/items', requireAuth, async (req, re
         res.status(500).json({ error: 'Failed to fetch items' });
     }
 });
+
+app.get('/api/auth/jwt', (req, res) => {
+    try {
+      const jwtToken = generateCodebeamerJWT('vectorCAST');
+      res.json({
+        success: true,
+        token: jwtToken,
+        valid: isJWTValid(jwtToken),
+        expiry: new Date((Math.floor(Date.now() / 1000) + (CB_TOKEN_VALID_MINUTES * 60)) * 1000).toISOString(),
+        codebeamerUrl: 'http://codebeamer.mdsit.co.kr:3008',
+        user: 'vectorCAST',
+        userRole: 'user'
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+// Additional authentication endpoints for compatibility
+app.get('/api/auth/session', async (req, res) => {
+    try {
+        const loginResult = await performCodebeamerLogin('vectorCAST');
+        
+        if (loginResult.success) {
+            res.json({
+                success: true,
+                csrfToken: loginResult.csrfToken,
+                hasCookies: !!loginResult.cookies,
+                codebeamerUrl: 'http://codebeamer.mdsit.co.kr:3008',
+                user: 'vectorCAST',
+                userRole: 'user'
+            });
+        } else {
+            res.json({
+                success: false,
+                error: loginResult.error
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+app.get('/api/auth/auto-login', (req, res) => {
+    try {
+        const autoLoginUrl = `${req.protocol}://${req.get('host')}/codebeamer-access`;
+        res.json({
+            success: true,
+            autoLoginUrl: autoLoginUrl,
+            codebeamerUrl: 'http://codebeamer.mdsit.co.kr:3008',
+            user: 'vectorCAST',
+            userRole: 'user',
+            credentials: {
+                username: 'vectorCAST',
+                password: '1234'
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+app.post('/api/auth/validate', (req, res) => {
+    try {
+        const { token } = req.body;
+        
+        if (!token) {
+            return res.status(400).json({
+                success: false,
+                error: 'Token is required'
+            });
+        }
+        
+        const isValid = isJWTValid(token);
+
+        let userInfo = null;
+        if (isValid) {
+            try {
+                const decoded = jwt.verify(token, CB_JWT_SECRET);
+                userInfo = {
+                    name: decoded.name,
+                    role: 'admin'
+                };
+            } catch (e) {
+                // Token verification failed
+            }
+        }
+        
+        res.json({
+            success: true,
+            valid: isValid,
+            token: isValid ? token : null,
+            user: userInfo
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// CodeBeamer access page for auto-login with item redirect
+app.get('/codebeamer-access', async (req, res) => {
+    try {
+        const itemId = req.query.item || '2138'; // Default item or from query
+        const loginResult = await performCodebeamerLogin('vectorCAST');
+        
+        if (loginResult.success) {
+            const autoLoginPage = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>Codebeamer Auto Login - VectorCAST Report Hub</title>
+                    <style>
+                        body { 
+                            font-family: Arial, sans-serif; 
+                            margin: 0;
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                            color: white;
+                            display: flex;
+                            justify-content: center;
+                            align-items: center;
+                            height: 100vh;
+                        }
+                        .container {
+                            text-align: center;
+                            background: rgba(255,255,255,0.1);
+                            padding: 40px;
+                            border-radius: 20px;
+                            backdrop-filter: blur(10px);
+                            border: 1px solid rgba(255,255,255,0.2);
+                            max-width: 500px;
+                        }
+                        .spinner { 
+                            border: 4px solid rgba(255,255,255,0.3);
+                            border-radius: 50%;
+                            border-top: 4px solid white;
+                            width: 50px;
+                            height: 50px;
+                            animation: spin 1s linear infinite;
+                            margin: 20px auto;
+                        }
+                        @keyframes spin {
+                            0% { transform: rotate(0deg); }
+                            100% { transform: rotate(360deg); }
+                        }
+                        .countdown {
+                            font-size: 18px;
+                            margin: 20px 0;
+                        }
+                        .item-info {
+                            background: rgba(255,255,255,0.1);
+                            padding: 15px;
+                            border-radius: 10px;
+                            margin: 20px 0;
+                            font-size: 14px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    <div class="container">
+                        <div class="spinner"></div>
+                        <h1><img src="/images/codebeamer_icon.png" alt="Codebeamer" style="width: 30px; height: 30px; vertical-align: middle; margin-right: 10px;"> 자동 로그인</h1>
+                        <p>사용자 <strong>vectorCAST</strong>로 Codebeamer에 자동 로그인합니다...</p>
+                        <div class="item-info">
+                            📋 아이템 ID: <strong>${itemId}</strong><br>
+                            🎯 로그인 후 해당 아이템으로 이동합니다
+                        </div>
+                        <p><span id="countdown">3</span>초 후 자동으로 제출됩니다</p>
+                    </div>
+                    
+                    <form id="loginForm" method="POST" action="http://codebeamer.mdsit.co.kr:3008/login.spr" target="codebeamerWindow" style="display:none;">
+                        <input type="hidden" name="_csrf" value="${loginResult.csrfToken}">
+                        <input type="text" name="user" value="vectorCAST">
+                        <input type="password" name="password" value="1234">
+                    </form>
+                    
+                    <script>
+                        let countdown = 3;
+                        const countdownElement = document.getElementById('countdown');
+                        
+                        const timer = setInterval(() => {
+                            countdown--;
+                            countdownElement.textContent = countdown;
+                            
+                            if (countdown <= 0) {
+                                clearInterval(timer);
+                                
+                                // Open CodeBeamer in new window and submit login
+                                const codebeamerWindow = window.open('about:blank', 'codebeamerWindow');
+                                document.getElementById('loginForm').submit();
+                                
+                                // Wait for login, then redirect the window to the specific item
+                                setTimeout(() => {
+                                    console.log('Redirecting to item ${itemId}...');
+                                    if (codebeamerWindow && !codebeamerWindow.closed) {
+                                        codebeamerWindow.location.href = 'http://codebeamer.mdsit.co.kr:3008/item/${itemId}';
+                                    } else {
+                                        // Fallback: open item in new window
+                                        window.open('http://codebeamer.mdsit.co.kr:3008/item/${itemId}', '_blank');
+                                    }
+                                    // Close this auto-login window
+                                    window.close();
+                                }, 4000);
+                            }
+                        }, 1000);
+                    </script>
+                </body>
+                </html>
+            `;
+            
+            res.send(autoLoginPage);
+        } else {
+            // Fallback: redirect to login page with item redirect
+            res.redirect(`http://codebeamer.mdsit.co.kr:3008/login.spr?redirect=/item/${itemId}`);
+        }
+        
+    } catch (error) {
+        console.error('Auto login error:', error);
+        res.redirect(`http://codebeamer.mdsit.co.kr:3008/login.spr?redirect=/item/${itemId}`);
+    }
+});
+
+// Additional JWT and login status endpoints from working app
+app.get('/api/login-status', async (req, res) => {
+    try {
+        const loginResult = await performCodebeamerLogin('vectorCAST');
+        res.json({
+            success: loginResult.success,
+            hasCsrfToken: !!loginResult.csrfToken,
+            error: loginResult.error
+        });
+    } catch (error) {
+        res.json({ success: false, error: error.message });
+    }
+});
+
+app.get('/jwt-status', (req, res) => {
+    const testToken = generateCodebeamerJWT('vectorCAST');
+    const status = {
+        jwtValid: isJWTValid(testToken),
+        tokenExpiry: new Date((Math.floor(Date.now() / 1000) + (CB_TOKEN_VALID_MINUTES * 60)) * 1000).toISOString(),
+        validMinutes: CB_TOKEN_VALID_MINUTES,
+        renewTimeframe: CB_TOKEN_RENEW_TIMEFRAME,
+        user: 'vectorCAST'
+    };
+    res.json(status);
+});
+
+app.post('/api/auth/webhook', (req, res) => {
+    try {
+        const { event, appId, userId, timestamp } = req.body;       
+        console.log(`Auth webhook received: ${event} from app ${appId} for user ${userId} at ${timestamp}`);
+        
+        res.json({
+            success: true,
+            message: 'Webhook received',
+            event: event,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+// Proxy middleware for CodeBeamer (alternative approach)
+app.use('/codebeamer-proxy', createProxyMiddleware({
+    target: 'http://codebeamer.mdsit.co.kr:3008',
+    changeOrigin: true,
+    pathRewrite: {
+        '^/codebeamer-proxy': '' // Remove the proxy prefix
+    },
+    onProxyReq: (proxyReq, req, res) => {
+        const jwtToken = generateCodebeamerJWT('vectorCAST');
+        proxyReq.setHeader('Authorization', `Bearer ${jwtToken}`);
+        proxyReq.setHeader('X-Auth-Token', jwtToken);
+        proxyReq.setHeader('X-User', 'vectorCAST');
+        
+        console.log('Proxying request with JWT token for vectorCAST:', jwtToken.substring(0, 20) + '...');
+    },
+    onProxyRes: (proxyRes, req, res) => {
+        const jwtToken = generateCodebeamerJWT('vectorCAST');
+        proxyRes.headers['X-JWT-Token'] = jwtToken;
+        proxyRes.headers['X-Auth-Status'] = 'authenticated';
+        
+        // Remove X-Frame-Options to allow embedding
+        delete proxyRes.headers['x-frame-options'];
+        // Add CORS headers
+        proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+        proxyRes.headers['Access-Control-Allow-Credentials'] = 'true';
+    }
+}));
 
 function generateVectorCastCodeBeamerData(vectorcastData) {
     console.log("Generating CodeBeamer data structure for VectorCAST data");

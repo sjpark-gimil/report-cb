@@ -8,6 +8,7 @@
     "node_modules/axios/dist/node/axios.cjs",
     "node_modules/ejs/**/*.js",
     "node_modules/ejs/package.json",
+    "uploads/**/*",
     "views/**/*.ejs",
     "public/**/*",
     "package.json",
