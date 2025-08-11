@@ -1688,23 +1688,8 @@ app.get('/codebeamer-access', async (req, res) => {
                             
                             if (countdown <= 0) {
                                 clearInterval(timer);
-                                
-                                // Open CodeBeamer in new window and submit login
-                                const codebeamerWindow = window.open('about:blank', 'codebeamerWindow');
+                                // Auto-submit the login form (same window, no popup)
                                 document.getElementById('loginForm').submit();
-                                
-                                // Wait for login, then redirect the window to the specific item
-                                setTimeout(() => {
-                                    console.log('Redirecting to item ${itemId}...');
-                                    if (codebeamerWindow && !codebeamerWindow.closed) {
-                                        codebeamerWindow.location.href = 'http://codebeamer.mdsit.co.kr:3008/item/${itemId}';
-                                    } else {
-                                        // Fallback: open item in new window
-                                        window.open('http://codebeamer.mdsit.co.kr:3008/item/${itemId}', '_blank');
-                                    }
-                                    // Close this auto-login window
-                                    window.close();
-                                }, 4000);
                             }
                         }, 1000);
                     </script>
