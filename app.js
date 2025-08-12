@@ -21,7 +21,8 @@ const CB_TOKEN_VALID_MINUTES = 262800; // 6 months
 const CB_TOKEN_RENEW_TIMEFRAME = 30; // 30 minutes
 const userCredentials = { 
     'vectorCAST': { username: 'vectorCAST', password: '1234', role: 'user' },
-    'mds': { username: 'mds', password: '1234', role: 'user' }
+    'mds': { username: 'mds', password: '1234', role: 'user' },
+    'sejin.park': { username: 'sejin.park', password: '1234', role: 'admin' }
 };
 
 function normalizePath(filePath) {
@@ -57,6 +58,20 @@ const isJWTValid = (token) => {
     try {
         const decoded = jwt.verify(token, CB_JWT_SECRET);
         return decoded.exp > Math.floor(Date.now() / 1000);
+    } catch (error) {
+        return false;
+    }
+};
+
+const validateAdminSession = (token) => {
+    try {
+        if (!token) return false;
+        
+        const decoded = jwt.verify(token, CB_JWT_SECRET);
+        const isValid = decoded.exp > Math.floor(Date.now() / 1000);
+        const isAdmin = decoded.name === 'sejin.park';
+        
+        return isValid && isAdmin;
     } catch (error) {
         return false;
     }
@@ -1494,23 +1509,82 @@ app.get('/api/codebeamer/trackers/:trackerId/items', requireAuth, async (req, re
 
 app.get('/api/auth/jwt', (req, res) => {
     try {
-      const jwtToken = generateCodebeamerJWT('vectorCAST');
-      res.json({
-        success: true,
-        token: jwtToken,
-        valid: isJWTValid(jwtToken),
-        expiry: new Date((Math.floor(Date.now() / 1000) + (CB_TOKEN_VALID_MINUTES * 60)) * 1000).toISOString(),
-        codebeamerUrl: 'http://codebeamer.mdsit.co.kr:3008',
-        user: 'vectorCAST',
-        userRole: 'user'
-      });
+        const adminToken = req.headers.authorization?.replace('Bearer ', '') || req.query.adminToken;
+        
+        if (!adminToken) {
+            return res.status(401).json({
+                success: false,
+                error: 'Admin token is required',
+                message: 'Please provide admin session token (sejin.park)'
+            });
+        }
+        
+        const isAdminValid = validateAdminSession(adminToken);
+        
+        if (!isAdminValid) {
+            return res.status(403).json({
+                success: false,
+                error: 'Invalid or expired admin session',
+                message: 'Admin session (sejin.park) must be valid and active'
+            });
+        }
+        
+        const jwtToken = generateCodebeamerJWT('vectorCAST');
+        res.json({
+            success: true,
+            token: jwtToken,
+            valid: isJWTValid(jwtToken),
+            expiry: new Date((Math.floor(Date.now() / 1000) + (CB_TOKEN_VALID_MINUTES * 60)) * 1000).toISOString(),
+            codebeamerUrl: 'http://codebeamer.mdsit.co.kr:3008',
+            user: 'vectorCAST',
+            userRole: 'user',
+            adminValidated: true
+        });
     } catch (error) {
-      res.status(500).json({
-        success: false,
-        error: error.message
-      });
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
     }
-  });
+});
+
+app.get('/api/auth/validate-admin', (req, res) => {
+    try {
+        const adminToken = req.headers.authorization?.replace('Bearer ', '') || req.query.token;
+        
+        if (!adminToken) {
+            return res.status(400).json({
+                success: false,
+                error: 'Admin token is required'
+            });
+        }
+        
+        const isValid = validateAdminSession(adminToken);
+        
+        if (isValid) {
+            const decoded = jwt.verify(adminToken, CB_JWT_SECRET);
+            res.json({
+                success: true,
+                valid: true,
+                user: decoded.name,
+                role: 'admin',
+                exp: decoded.exp,
+                expDate: new Date(decoded.exp * 1000).toISOString()
+            });
+        } else {
+            res.json({
+                success: false,
+                valid: false,
+                error: 'Invalid or expired admin session'
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
 
 // Additional authentication endpoints for compatibility
 app.get('/api/auth/session', async (req, res) => {
@@ -1688,8 +1762,23 @@ app.get('/codebeamer-access', async (req, res) => {
                             
                             if (countdown <= 0) {
                                 clearInterval(timer);
-                                // Auto-submit the login form (same window, no popup)
+                                
+                                // Open CodeBeamer in new window and submit login
+                                const codebeamerWindow = window.open('about:blank', 'codebeamerWindow');
                                 document.getElementById('loginForm').submit();
+                                
+                                // Wait for login, then redirect the window to the specific item
+                                setTimeout(() => {
+                                    console.log('Redirecting to item ${itemId}...');
+                                    if (codebeamerWindow && !codebeamerWindow.closed) {
+                                        codebeamerWindow.location.href = 'http://codebeamer.mdsit.co.kr:3008/item/${itemId}';
+                                    } else {
+                                        // Fallback: open item in new window
+                                        window.open('http://codebeamer.mdsit.co.kr:3008/item/${itemId}', '_blank');
+                                    }
+                                    // Close this auto-login window
+                                    window.close();
+                                }, 4000);
                             }
                         }, 1000);
                     </script>
@@ -1735,6 +1824,50 @@ app.get('/jwt-status', (req, res) => {
     res.json(status);
 });
 
+app.get('/admin-session-test', (req, res) => {
+    const adminToken = req.query.token || req.headers.authorization?.replace('Bearer ', '');
+    
+    if (!adminToken) {
+        return res.json({
+            success: false,
+            error: 'No admin token provided',
+            usage: 'Use ?token=YOUR_ADMIN_TOKEN or Authorization header',
+            example: 'http://localhost:3007/admin-session-test?token=eyJ0eXAiOiJKV1QiLCJpZ25vcmVBcGlBY2Nlc3NQZXJtaXNzaW9uIjp0cnVlLCJpZ25vcmVUaHJvdHRsaW5nIjp0cnVlLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJjb2RlQmVhbWVyIiwibmFtZSI6InNlamluLnBhcmsiLCJleHAiOjE3NzA3MjY1ODQsInR5cGUiOiJhY2Nlc3MiLCJpYXQiOjE3NTQ5NTg1ODR9.5k-QHKfHBgCa6L5dKlzE-WAQYukTEvDoxMZOlcuVWq0'
+        });
+    }
+    
+    const isValid = validateAdminSession(adminToken);
+    
+    if (isValid) {
+        try {
+            const decoded = jwt.verify(adminToken, CB_JWT_SECRET);
+            res.json({
+                success: true,
+                adminValid: true,
+                user: decoded.name,
+                role: 'admin',
+                exp: decoded.exp,
+                expDate: new Date(decoded.exp * 1000).toISOString(),
+                message: 'Admin session is valid. vectorCAST can now be logged in automatically.',
+                nextStep: 'Use this admin token with /api/auth/jwt endpoint to get vectorCAST token'
+            });
+        } catch (error) {
+            res.json({
+                success: false,
+                error: 'Token verification failed',
+                details: error.message
+            });
+        }
+    } else {
+        res.json({
+            success: false,
+            adminValid: false,
+            error: 'Invalid or expired admin session',
+            message: 'Admin session (sejin.park) must be valid and active for vectorCAST auto-login'
+        });
+    }
+});
+
 app.post('/api/auth/webhook', (req, res) => {
     try {
         const { event, appId, userId, timestamp } = req.body;       
@@ -1762,17 +1895,39 @@ app.use('/codebeamer-proxy', createProxyMiddleware({
         '^/codebeamer-proxy': '' // Remove the proxy prefix
     },
     onProxyReq: (proxyReq, req, res) => {
+        const adminToken = req.headers['x-admin-token'] || req.query.adminToken;
+        
+        if (!adminToken) {
+            res.status(401).json({
+                success: false,
+                error: 'Admin token is required for proxy access'
+            });
+            return;
+        }
+        
+        const isAdminValid = validateAdminSession(adminToken);
+        
+        if (!isAdminValid) {
+            res.status(403).json({
+                success: false,
+                error: 'Invalid admin session for proxy access'
+            });
+            return;
+        }
+        
         const jwtToken = generateCodebeamerJWT('vectorCAST');
         proxyReq.setHeader('Authorization', `Bearer ${jwtToken}`);
         proxyReq.setHeader('X-Auth-Token', jwtToken);
         proxyReq.setHeader('X-User', 'vectorCAST');
+        proxyReq.setHeader('X-Admin-Validated', 'true');
         
-        console.log('Proxying request with JWT token for vectorCAST:', jwtToken.substring(0, 20) + '...');
+        console.log('Proxying request with JWT token for vectorCAST (admin validated):', jwtToken.substring(0, 20) + '...');
     },
     onProxyRes: (proxyRes, req, res) => {
         const jwtToken = generateCodebeamerJWT('vectorCAST');
         proxyRes.headers['X-JWT-Token'] = jwtToken;
         proxyRes.headers['X-Auth-Status'] = 'authenticated';
+        proxyRes.headers['X-Admin-Validated'] = 'true';
         
         // Remove X-Frame-Options to allow embedding
         delete proxyRes.headers['x-frame-options'];

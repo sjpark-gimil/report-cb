@@ -563,7 +563,7 @@ strong {
 .path-input:focus {
     border-color: #B70032;
     outline: none;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    box-shadow: 0 0 0 2px rgba(255, 0, 0, 0.25);
 }
 
 .add-path-btn, .remove-path-btn {
@@ -640,12 +640,11 @@ strong {
     border-radius: 4px;
     background-color: white;
     font-size: 14px;
-    color: #565C5E;
+    color: #5e5656;
     cursor: pointer;
     appearance: none;
     -webkit-appearance: none;
-    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23555' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-    background-repeat: no-repeat;
+   
     background-position: right 15px center;
     background-size: 16px;
 }
@@ -1051,7 +1050,6 @@ select.report-select option {
 .selector-container select:focus {
     outline: none;
     border-color: #B70032;
-    box-shadow: 0 0 0 2px rgba(0, 181, 237, 0.2);
 }
 
 .selector-container select option {
@@ -1263,14 +1261,14 @@ select.report-select option {
 }
 
 .auto-login-container h2 {
-    color: #2c3e50;
+    color: #502c2c;
     margin-bottom: 20px;
     font-size: 24px;
     font-weight: 600;
 }
 
 .auto-login-container p {
-    color: #7f8c8d;
+    color: #8d7f7f;
     margin-bottom: 30px;
     font-size: 16px;
 }
