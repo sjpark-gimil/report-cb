@@ -16,7 +16,10 @@
         <div class="title-container"><h1>Codebeamer Connector</h1><p>VectorCAST Report Hub </p></div>
         <div class="menu-container">
             <span class="menu-item"><img src="images/user.svg" alt="User" /><%= username %></span>
+            <!--
             <a href="#" class="menu-item" onclick="handleLogout()"><img src="images/logout.svg" alt="Logout" />Logout</a>
+            -->      
+        
         </div>                  
     </header>
 
@@ -1585,26 +1588,13 @@ CodeBeamer 자동 로그인을 위해 새 창이 열립니다.
     });
 
     async function fetchProjects() {
-        if (cachedProjects) {
-            return cachedProjects;
-        }
-
-        try {
-            const response = await fetch('/api/codebeamer/projects', {
-                method: 'GET',
-                credentials: 'include'
-            });
-            
-            if (!response.ok) {
-                throw new Error('Failed to fetch projects');
+        // TEMPORARY: Return static project data
+        return [
+            {
+                id: 11,
+                name: "VectorCAST"
             }
-            
-            cachedProjects = await response.json();
-            return cachedProjects;
-        } catch (error) {
-            console.error('Error loading projects:', error);
-            throw error;
-        }
+        ];
     }
 
     async function loadAllProjects() {
@@ -1657,17 +1647,15 @@ CodeBeamer 자동 로그인을 위해 새 창이 열립니다.
         
         if (!projectSelector.value) return;
         
-        try {
-            const response = await fetch(`/api/codebeamer/projects/${projectSelector.value}/trackers`, {
-                method: 'GET',
-                credentials: 'include'
-            });
+        // TEMPORARY: Return static tracker data for project ID 7
+        if (projectSelector.value === "11") {
+            const trackers = [
+                {
+                    id: 13136,
+                    name: "Test Results"
+                }
+            ];
             
-            if (!response.ok) {
-                throw new Error('Failed to fetch trackers');
-            }
-            
-            const trackers = await response.json();
             trackers.forEach(tracker => {
                 const option = document.createElement('option');
                 option.value = tracker.id;
@@ -1676,8 +1664,6 @@ CodeBeamer 자동 로그인을 위해 새 창이 열립니다.
             });
             
             trackerSelector.disabled = false;
-        } catch (error) {
-            console.error('Error loading trackers:', error);
         }
     }
 
@@ -1693,17 +1679,15 @@ CodeBeamer 자동 로그인을 위해 새 창이 열립니다.
         
         if (!projectSelector.value) return;
         
-        try {
-            const response = await fetch(`/api/codebeamer/projects/${projectSelector.value}/trackers`, {
-                method: 'GET',
-                credentials: 'include'
-            });
+        // TEMPORARY: Return static tracker data for project ID 3
+        if (projectSelector.value === "11") {
+            const trackers = [
+                {
+                    id: 13136,
+                    name: "Test Results"
+                }
+            ];
             
-            if (!response.ok) {
-                throw new Error('Failed to fetch trackers');
-            }
-            
-            const trackers = await response.json();
             trackers.forEach(tracker => {
                 const option = document.createElement('option');
                 option.value = tracker.id;
@@ -1712,8 +1696,6 @@ CodeBeamer 자동 로그인을 위해 새 창이 열립니다.
             });
             
             trackerSelector.disabled = false;
-        } catch (error) {
-            console.error('Error loading trackers:', error);
         }
     }
 
